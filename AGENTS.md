@@ -13,22 +13,24 @@ decision, add a NEW dated file that supersedes the old one (link both ways) and
 get sign-off first. Skim the [index](docs/decisions/README.md) before any
 non-trivial task. Highlights:
 
-- **Public OSS app on GitHub** (not the private Gitea). No homelab secrets in git;
-  config comes from the environment.
-- **Local drive + node-modules linker.** This repo lives at
-  `D:\Code-Projects\Personal\inkcast`, NOT the `G:` SMB share (symlinks/PnP both
-  fail over the network drive).
+- **Public OSS app.** No secrets, credentials, hostnames, or real device
+  identifiers in git — config comes from the environment (`.env`, gitignored).
+- **Develop on a local disk (node-modules linker).** A mapped network share
+  can't host the Yarn-workspace symlinks (both `node-modules` and PnP fail over
+  SMB) — keep the working tree on a local drive.
 - **Views use inline style objects** (Satori-safe flexbox), not Emotion/Tailwind.
 - **Latest dependencies**, never scaffold with old ones.
+- **Prod = esbuild bundle + `node`**, never `tsx` (RAM). `yarn build` → `node
+  dist/index.js`.
+- **No redundant arrow return-type annotations** — let TS infer (see code-rules).
 
 ## Project
 
 A TypeScript monorepo (Yarn 4 workspaces). The server renders a per-device HTML
 view with headless Chromium (or Satori), quantizes/dithers it to the panel's
-palette, and pushes it over MQTT. See
-[docs/new-platform-build-handoff.md](docs/new-platform-build-handoff.md) is the
-originating brief (in the `home-displays` repo); the architecture + phase plan
-live there.
+palette, and pushes it over MQTT; devices surface in Home Assistant via MQTT
+discovery. Architecture + phase plan are in the README and
+[docs/phase-0-findings.md](docs/phase-0-findings.md).
 
 ### Packages
 
@@ -75,7 +77,20 @@ the pragma is harmless there and keeps every path consistent.
 5. **No array mutation** (`concat` over spread-push).
 
 Plus: function destructuring for 2+ args, always-braced `if`/`else`, arrow
-functions, no barrel files, JSDoc immediately above exports.
+functions, no barrel files, JSDoc immediately above exports, and **no redundant
+arrow return-type annotations** (let TS infer; keep only type predicates
+`x is Y`, or where inference genuinely breaks — e.g. a factory whose branches
+return a shared interface).
+
+## Mirror the sibling app repos — don't regress their settled conventions
+
+Inkcast deliberately mirrors the maintainer's other TypeScript app repos (the
+`mux-magic` family): Yarn 4, TS 6 NodeNext, Biome + ESLint, Vitest, esbuild-bundle
+prod, the code rules above. Those repos carry a `docs/decisions/` log of **locked**
+toolchain/convention decisions. Before changing any toolchain, build, lint, test,
+or code-style choice here, assume the sibling repos already settled it — match
+them rather than introducing a different approach. Regressing one of their locked
+decisions in this repo is the failure mode to avoid.
 
 ## Before every commit
 
