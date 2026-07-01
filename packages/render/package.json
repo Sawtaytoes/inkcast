@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@inkcast/core": "workspace:*",
     "@inkcast/views": "workspace:*",
     "@resvg/resvg-js": "^2.6.2",
     "react": "^19.2.7",
