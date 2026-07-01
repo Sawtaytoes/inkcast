@@ -12,7 +12,7 @@ import type {
  * the supersampled PNG comes out at `width × supersampleFactor`.
  *
  * Because it is a real browser, the Vite dev-preview renders the identical
- * engine: what Kevin sees in the editor is what the device gets (pre-dither).
+ * engine: what you see in the editor is what the device gets (pre-dither).
  * The trade-off is weight (bundled Chromium) and per-render latency.
  */
 

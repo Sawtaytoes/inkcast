@@ -4,7 +4,7 @@ import sharp from "sharp"
 
 /**
  * Bake-off contact-sheet helpers. Composes labelled PNG tiles into a grid so
- * Kevin can eyeball render-engine and dither differences side by side (the
+ * you can eyeball render-engine and dither differences side by side (the
  * Decision-1 and Decision-2 deliverables). Labels are rasterized with resvg +
  * the DejaVu font so this works headless on any OS.
  */

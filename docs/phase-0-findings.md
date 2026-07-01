@@ -39,11 +39,11 @@ See `render-output/render/engine-comparison.png`.
 repo as a lightweight fast-path option, but it needs per-view tuning to match and
 isn't trustworthy for arbitrary layouts.
 
-## Decision 2 — dithering (per panel, Kevin wanted to SEE this)
+## Decision 2 — dithering (per panel, the maintainer wanted to SEE this)
 
 Sheets: `render-output/dither/<panel>--{card,gradient,photo}.png`. Rows =
 supersample 1×/2×/4×, columns = algorithm. Mono and E6 are separate sheets so the
-choice can differ per panel (as Kevin noted it likely should).
+choice can differ per panel (as the maintainer noted it likely should).
 
 ### Mono pHAT (250×122, 1-bit) — text is the job
 

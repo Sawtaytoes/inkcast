@@ -10,7 +10,7 @@ import {
 
 /**
  * Decision-1 bake-off: render the now-playing card through BOTH engines
- * (Chromium and Satori) at each panel size and lay them side by side so Kevin
+ * (Chromium and Satori) at each panel size and lay them side by side so you
  * can compare fidelity + preview-parity. Writes full-colour (pre-dither) PNGs
  * and one comparison sheet to `render-output/render/`.
  */

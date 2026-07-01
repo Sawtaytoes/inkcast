@@ -99,7 +99,7 @@ decisions in this repo is the failure mode to avoid.
 - `yarn test` — Vitest unit tests.
 
 Commit small and often; conventional commits; one logical change per commit.
-**Never** push to the GitHub remote or publish without Kevin's go-ahead.
+**Never** push to the GitHub remote or publish without the maintainer's go-ahead.
 
 ## Package manager
 

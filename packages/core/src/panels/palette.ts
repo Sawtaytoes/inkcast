@@ -41,7 +41,7 @@ export const E6_VIVID_PALETTE: Palette = [
 /**
  * Spectra 6 "device-real" palette (Pimoroni SATURATED_PALETTE, indices 0–5).
  * The muted tones the physical E6 ink actually produces — closer to the honest
- * on-wall look (Kevin's "colour looks awful" observation lives here).
+ * on-wall look — the honest, slightly muted result real E6 ink produces).
  */
 export const E6_DEVICE_PALETTE: Palette = [
   [0, 0, 0],

@@ -15,14 +15,14 @@ possibly-stale version from a sibling repo.
 
 ## Context
 
-The scaffold initially mirrored `mux-magic`'s exact dependency versions. Kevin
+The scaffold initially mirrored `mux-magic`'s exact dependency versions. the maintainer
 directed: use the latest, don't install old ones. Several deps were materially
 behind (e.g. Satori `0.12` → `0.26`, sharp `0.34` → `0.35`, `@types/node`
 `25` → `26`, Biome `2.4` → `2.5`).
 
 ## Why
 
-- Kevin: "Upgrade to the latest dependencies. We don't need to install old ones."
+- the maintainer: "Upgrade to the latest dependencies. We don't need to install old ones."
 - Matches the sibling repos' locked "never downgrade the toolchain" rule (TS 6,
   Vitest 4, Biome 2, ESLint 10), extended to every dependency.
 

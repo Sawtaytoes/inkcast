@@ -10,7 +10,7 @@ import {
 
 /**
  * The Inkcast HTTP API (Hono). Token-authenticated (a Bearer token, no
- * user/password — Kevin's stated preference); `/health` stays open. Lets an
+ * user/password by preference); `/health` stays open. Lets an
  * agent or HA list devices, fetch the current rendered image, force a refresh,
  * or switch a device's view. The same actions are reachable over MQTT.
  */

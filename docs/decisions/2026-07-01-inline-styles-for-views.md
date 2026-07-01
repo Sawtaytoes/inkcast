@@ -29,7 +29,7 @@ flexbox.
 
 ## Why
 
-- Kevin: "We should be using Tailwind, not Emotion." → "Although, I'm not sure if
+- the maintainer: "We should be using Tailwind, not Emotion." → "Although, I'm not sure if
   even Tailwind matters. Custom CSS might be fine since these are each unique
   views."
 - Engine parity: inline + flexbox is the only styling both Chromium and Satori
