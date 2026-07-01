@@ -18,8 +18,21 @@ render-output/
 
 .cache
 .config
+
+# Secrets + anything house-specific (creds, hostnames, real device MACs/names,
+# TLS certs). NEVER commit these — the repo is public. Only *.example is tracked.
 .env
-.env.local
+.env.*
+!.env.example
+inkcast.config.*
+!inkcast.config.example.*
+devices.json
+*.local.json
+# TLS material for the MQTT broker connection
+certs/
+*.pem
+*.crt
+*.key
 
 # Playwright artifacts
 playwright-report/
