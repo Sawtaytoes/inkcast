@@ -1,0 +1,12 @@
+# Normalize line endings: LF in the repo and on checkout, everywhere.
+# Biome enforces `lineEnding: lf`, so avoid Windows CRLF churn.
+* text=auto eol=lf
+
+# Binary assets — never touch these.
+*.ttf binary
+*.otf binary
+*.png binary
+*.jpg binary
+*.woff binary
+*.woff2 binary
+.yarn/releases/** binary

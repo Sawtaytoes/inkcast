@@ -1,0 +1,45 @@
+{
+  "name": "inkcast",
+  "private": true,
+  "packageManager": "yarn@4.14.1",
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "bakeoff:render": "tsx scripts/bakeoff-render.ts",
+    "bakeoff:dither": "tsx scripts/bakeoff-dither.ts",
+    "bakeoff": "yarn bakeoff:render && yarn bakeoff:dither",
+    "dev": "yarn workspace @inkcast/web dev",
+    "storybook": "yarn workspace @inkcast/web storybook",
+    "install-playwright-browser": "yarn playwright install chromium --with-deps",
+    "lint:biome": "biome check --write --unsafe",
+    "lint:eslint": "eslint . --fix",
+    "lint": "yarn lint:biome && yarn lint:eslint",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit && yarn workspaces foreach -Ap run typecheck"
+  },
+  "dependencies": {
+    "@inkcast/core": "workspace:*",
+    "@inkcast/render": "workspace:*",
+    "@inkcast/views": "workspace:*",
+    "@resvg/resvg-js": "^2.6.2",
+    "playwright": "^1.61.1",
+    "react": "^19.2.7",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.2",
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.0",
+    "@vitest/eslint-plugin": "^1.6.20",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react": "^7.37.5",
+    "rimraf": "^6.1.3",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.1",
+    "vitest": "^4.1.9"
+  }
+}
