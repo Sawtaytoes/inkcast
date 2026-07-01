@@ -21,6 +21,12 @@ import {
  * command topics, pushes an initial frame per device, and serves the HTTP API.
  */
 const main = async () => {
+  // Load a local .env if present (gitignored). In containers, env is usually
+  // passed directly, so a missing file is fine.
+  try {
+    process.loadEnvFile()
+  } catch {}
+
   const config = loadConfig()
   const { baseTopic } = config.mqtt
 

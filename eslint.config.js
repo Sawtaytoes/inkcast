@@ -65,7 +65,8 @@ export default defineConfig(
         "error",
         {
           min: 2,
-          exceptions: ["_"],
+          // "_" ignore-placeholder; "z" is the conventional zod namespace alias.
+          exceptions: ["_", "z"],
           properties: "never",
         },
       ],

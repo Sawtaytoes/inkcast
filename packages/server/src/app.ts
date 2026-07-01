@@ -1,12 +1,12 @@
+import { apiReference } from "@scalar/hono-api-reference"
 import { Hono } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
+import { buildOpenApiDocument } from "./api/openapi.ts"
+import { SetViewRequestSchema } from "./api/schemas.ts"
 import type { InkcastConfig } from "./config/env.ts"
 import type { PushController } from "./pushController.ts"
 import type { DeviceStore } from "./state/deviceStore.ts"
-import {
-  getIsViewName,
-  VIEW_NAMES,
-} from "./views/registry.ts"
+import { VIEW_NAMES } from "./views/registry.ts"
 
 /**
  * The Inkcast HTTP API (Hono). Token-authenticated (a Bearer token, no
@@ -28,6 +28,12 @@ export const createApp = ({
   app.get("/health", (context) =>
     context.json({ status: "ok", views: VIEW_NAMES }),
   )
+
+  // OpenAPI spec + Scalar docs UI (public — no token needed to read the docs).
+  app.get("/openapi.json", (context) =>
+    context.json(buildOpenApiDocument({ config })),
+  )
+  app.get("/docs", apiReference({ url: "/openapi.json" }))
 
   // Token-gate the API surface. With no token set (LAN/dev), the API is open.
   if (config.apiToken) {
@@ -75,26 +81,24 @@ export const createApp = ({
   })
 
   app.post("/api/devices/:id/view", async (context) => {
-    const body = await context.req
-      .json<{ view?: unknown }>()
-      .catch(() => ({ view: undefined }))
+    const body = await context.req.json().catch(() => null)
+    const parsed = SetViewRequestSchema.safeParse(body)
 
-    if (
-      typeof body.view !== "string" ||
-      !getIsViewName(body.view)
-    ) {
+    if (!parsed.success) {
       return context.json(
-        { error: "invalid view", allowed: VIEW_NAMES },
+        {
+          error: `invalid view; allowed: ${VIEW_NAMES.join(", ")}`,
+        },
         400,
       )
     }
 
     const isPushed = await pushController.setView({
       deviceId: context.req.param("id"),
-      viewName: body.view,
+      viewName: parsed.data.view,
     })
     return isPushed
-      ? context.json({ ok: true, view: body.view })
+      ? context.json({ ok: true, view: parsed.data.view })
       : context.json({ error: "unknown device" }, 404)
   })
 

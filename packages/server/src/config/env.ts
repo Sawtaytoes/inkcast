@@ -8,34 +8,40 @@ import {
   E6_DEFAULT_PALETTE,
   MONO_PALETTE,
 } from "@inkcast/core/panels/palette"
-import { z } from "zod"
+import * as z from "zod/mini"
 
 /**
  * Runtime configuration, validated from environment variables. Everything
  * house-specific (hostnames, credentials, real device MACs, TLS material) lives
  * here and comes from the gitignored `.env` / device-config file — never from
  * committed source. See `.env.example`.
+ *
+ * Uses `zod/mini` (the tree-shakeable variant) — available here because Inkcast
+ * builds its OpenAPI from zod's native `toJSONSchema`, not `@hono/zod-openapi`.
  */
 
 const EnvSchema = z.object({
-  PORT: z.coerce.number().default(8788),
-  INKCAST_API_TOKEN: z.string().default(""),
-  INKCAST_RENDER_ENGINE: z
-    .enum(["chromium", "satori"])
-    .default("chromium"),
-  INKCAST_DEVICES_FILE: z.string().optional(),
-  MQTT_URL: z.string().default(""),
-  MQTT_USERNAME: z.string().default(""),
-  MQTT_PASSWORD: z.string().default(""),
-  MQTT_CA_FILE: z.string().optional(),
-  MQTT_REJECT_UNAUTHORIZED: z
-    .enum(["true", "false"])
-    .default("true"),
-  MQTT_DISCOVERY_PREFIX: z
-    .string()
-    .default("homeassistant"),
-  MQTT_NODE_ID: z.string().default("inkcast"),
-  MQTT_BASE_TOPIC: z.string().default("inkcast"),
+  PORT: z._default(z.coerce.number(), 8788),
+  INKCAST_API_TOKEN: z._default(z.string(), ""),
+  INKCAST_RENDER_ENGINE: z._default(
+    z.enum(["chromium", "satori"]),
+    "chromium",
+  ),
+  INKCAST_DEVICES_FILE: z.optional(z.string()),
+  MQTT_URL: z._default(z.string(), ""),
+  MQTT_USERNAME: z._default(z.string(), ""),
+  MQTT_PASSWORD: z._default(z.string(), ""),
+  MQTT_CA_FILE: z.optional(z.string()),
+  MQTT_REJECT_UNAUTHORIZED: z._default(
+    z.enum(["true", "false"]),
+    "true",
+  ),
+  MQTT_DISCOVERY_PREFIX: z._default(
+    z.string(),
+    "homeassistant",
+  ),
+  MQTT_NODE_ID: z._default(z.string(), "inkcast"),
+  MQTT_BASE_TOPIC: z._default(z.string(), "inkcast"),
 })
 
 /**
@@ -46,26 +52,25 @@ const DeviceConfigSchema = z.object({
   id: z.string(),
   label: z.string(),
   mac: z.string(),
-  width: z.number().int().positive(),
-  height: z.number().int().positive(),
+  width: z.int().check(z.positive()),
+  height: z.int().check(z.positive()),
   colourMode: z.enum(["mono", "e6"]),
-  rotation: z
-    .union([
+  rotation: z._default(
+    z.union([
       z.literal(0),
       z.literal(90),
       z.literal(180),
       z.literal(270),
-    ])
-    .default(0),
-  ditherProfile: z
-    .object({
+    ]),
+    0,
+  ),
+  ditherProfile: z._default(
+    z.object({
       algorithm: z.enum(DITHER_ALGORITHMS),
-      supersampleFactor: z.number().positive(),
-    })
-    .default({
-      algorithm: "floyd-steinberg",
-      supersampleFactor: 2,
+      supersampleFactor: z.number().check(z.positive()),
     }),
+    { algorithm: "floyd-steinberg", supersampleFactor: 2 },
+  ),
 })
 
 const expandDevice = (

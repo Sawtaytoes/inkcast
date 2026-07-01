@@ -921,6 +921,7 @@ __metadata:
     "@inkcast/core": "workspace:*"
     "@inkcast/render": "workspace:*"
     "@inkcast/views": "workspace:*"
+    "@scalar/hono-api-reference": "npm:^0.11.7"
     "@types/node": "npm:^26.1.0"
     "@types/react": "npm:^19.2.17"
     hono: "npm:^4.12.27"
@@ -1621,6 +1622,64 @@ __metadata:
     rollup:
       optional: true
   checksum: 10c0/ccc2cbd3a05df642df60ab05ffb81b2e564bd945e2a118bb8a474ea75b941033c8f44273133d4865643cca1492d0c80b14de1281f74779a64285a80fc3a194d8
+  languageName: node
+  linkType: hard
+
+"@scalar/client-side-rendering@npm:0.3.0":
+  version: 0.3.0
+  resolution: "@scalar/client-side-rendering@npm:0.3.0"
+  dependencies:
+    "@scalar/schemas": "npm:0.7.0"
+    "@scalar/types": "npm:0.16.0"
+    "@scalar/validation": "npm:0.6.0"
+  checksum: 10c0/2acde89267971fe345063eeacbdc23c0378adf95ee5f3e579fe3c5f14b9560e4f91782db35ddd05a54132e2d515dfc196e0c29b91960f85fb2cc7784cecb2349
+  languageName: node
+  linkType: hard
+
+"@scalar/helpers@npm:0.9.0":
+  version: 0.9.0
+  resolution: "@scalar/helpers@npm:0.9.0"
+  checksum: 10c0/8c2065de95e3dcbe41b9432affb73abea8598b53267b9b0b1e4aefa4b51ea65e7ecbed1d74615550cbe89c44cefe7c2f4b9bcd138718059a38d822cacebe24e4
+  languageName: node
+  linkType: hard
+
+"@scalar/hono-api-reference@npm:^0.11.7":
+  version: 0.11.7
+  resolution: "@scalar/hono-api-reference@npm:0.11.7"
+  dependencies:
+    "@scalar/client-side-rendering": "npm:0.3.0"
+  peerDependencies:
+    hono: ^4.12.5
+  checksum: 10c0/523b7cf2265e1a00fd27ed398aa223616d674e70416b3aa46356da8432a50c6ff732acc4d8d76e395b635b4fc0d3c12100a2051caab6504dda20d092fcb6bbec
+  languageName: node
+  linkType: hard
+
+"@scalar/schemas@npm:0.7.0":
+  version: 0.7.0
+  resolution: "@scalar/schemas@npm:0.7.0"
+  dependencies:
+    "@scalar/helpers": "npm:0.9.0"
+    "@scalar/validation": "npm:0.6.0"
+  checksum: 10c0/ed3faf76e2ff61217a0fff724ceeb623bf5b000fd2906c5176c91ed9b2b7e679aab63e60626e03fa5de620d0a74987184c02d33db38a622ac27c48500c19a11d
+  languageName: node
+  linkType: hard
+
+"@scalar/types@npm:0.16.0":
+  version: 0.16.0
+  resolution: "@scalar/types@npm:0.16.0"
+  dependencies:
+    "@scalar/helpers": "npm:0.9.0"
+    nanoid: "npm:^5.1.6"
+    type-fest: "npm:^5.3.1"
+    zod: "npm:^4.3.5"
+  checksum: 10c0/bd0bb7e8afc7ba8104bd2f15f164121ca6b4568895fb7ef42f06b6d3677bf457bdb41ab35208a166234add467884f5eb74bc5fcf710fbab751bc68ae6753b9a7
+  languageName: node
+  linkType: hard
+
+"@scalar/validation@npm:0.6.0":
+  version: 0.6.0
+  resolution: "@scalar/validation@npm:0.6.0"
+  checksum: 10c0/a6132b22cb7adb4ca3419edd82b774f288566dd0cac8013bec1f0ad216a36f41fa991fc4192a1825bafebdf34c483a1ec264d7e5c4587e221a1544a44b77af1d
   languageName: node
   linkType: hard
 
@@ -4519,6 +4578,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"nanoid@npm:^5.1.6":
+  version: 5.1.16
+  resolution: "nanoid@npm:5.1.16"
+  bin:
+    nanoid: bin/nanoid.js
+  checksum: 10c0/04b4f96237f5639716da0e98f453361b313bebaf458bb67dea2d384724fc8b3340a28f032a4373052150bcf3b801d122e291d81ae4fc522969f55c134f4401a3
+  languageName: node
+  linkType: hard
+
 "natural-compare@npm:^1.4.0":
   version: 1.4.0
   resolution: "natural-compare@npm:1.4.0"
@@ -5803,6 +5871,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"tagged-tag@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "tagged-tag@npm:1.0.0"
+  checksum: 10c0/91d25c9ffb86a91f20522cefb2cbec9b64caa1febe27ad0df52f08993ff60888022d771e868e6416cf2e72dab68449d2139e8709ba009b74c6c7ecd4000048d1
+  languageName: node
+  linkType: hard
+
 "tar@npm:^7.5.4":
   version: 7.5.19
   resolution: "tar@npm:7.5.19"
@@ -5930,6 +6005,15 @@ __metadata:
   dependencies:
     prelude-ls: "npm:^1.2.1"
   checksum: 10c0/7b3fd0ed43891e2080bf0c5c504b418fbb3e5c7b9708d3d015037ba2e6323a28152ec163bcb65212741fa5d2022e3075ac3c76440dbd344c9035f818e8ecee58
+  languageName: node
+  linkType: hard
+
+"type-fest@npm:^5.3.1":
+  version: 5.7.0
+  resolution: "type-fest@npm:5.7.0"
+  dependencies:
+    tagged-tag: "npm:^1.0.0"
+  checksum: 10c0/f71ed17b753649421e419db8cc2e140f930333a1467b1d9cca2e0e4052900fd442f2360bae73f3a6bf9340d949ac46d9a1598c709b4c8089272e7624df9c8716
   languageName: node
   linkType: hard
 
@@ -6448,7 +6532,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:^4.4.3":
+"zod@npm:^4.3.5, zod@npm:^4.4.3":
   version: 4.4.3
   resolution: "zod@npm:4.4.3"
   checksum: 10c0/7ea31b558e88f9faf44f31dd185e2e1cbf51fed3081787fb96cc2534749b50c0acfc6da7f0922a7353ed092dd358c7d50c28ea96c94d04af64191bd33152eca3
