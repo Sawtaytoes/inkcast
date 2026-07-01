@@ -1,0 +1,22 @@
+{
+  "name": "@inkcast/views",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.tsx"
+  },
+  "description": "Inkcast display views — static React components rendered by BOTH the Chromium and Satori engines, so they use inline style objects with a flexbox subset (Satori-safe). One component per file.",
+  "scripts": {
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "react": "^19.2.7",
+    "typescript": "^6.0.3"
+  }
+}
