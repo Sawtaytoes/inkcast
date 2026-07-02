@@ -152,18 +152,24 @@ export const createPhotoFrameAdapter = ({
     return { personIds, queryText }
   }
 
+  /**
+   * Fetch + crop + store + push a fresh random photo for the device. Returns
+   * true only when a photo was actually pushed — false when nothing is
+   * configured, nothing matched, or the fetch failed (so callers can decide
+   * whether to fall back to the placeholder).
+   */
   const refreshDevice = async (deviceId: string) => {
     const device = devices.find(
       (candidate) => candidate.id === deviceId,
     )
     if (!device) {
-      return
+      return false
     }
 
     try {
       const source = await resolvePhotoSource(deviceId)
       if (!source) {
-        return
+        return false
       }
 
       const assetId = await pickRandomAssetId({
@@ -176,7 +182,7 @@ export const createPhotoFrameAdapter = ({
         console.error(
           `[inkcast] photo frame ${deviceId}: no assets match the configured people/query`,
         )
-        return
+        return false
       }
 
       await showAsset({
@@ -185,11 +191,34 @@ export const createPhotoFrameAdapter = ({
         personIds: source.personIds,
       })
       recordShownAsset({ deviceId, assetId })
+      return true
     } catch (error) {
       console.error(
         `[inkcast] photo frame ${deviceId}: fetch failed`,
         error,
       )
+      return false
+    }
+  }
+
+  /**
+   * Run when a device switches INTO the Photo Frame view. A cached photo is
+   * shown immediately (the interval tick handles rotation); otherwise a fresh
+   * one is fetched. Only when there is genuinely nothing to show — no photo
+   * cached and no people/query configured (or the fetch failed) — does it push
+   * the instructional placeholder. Exactly one push happens either way, so
+   * e-ink never flashes the placeholder before the photo.
+   */
+  const showPhotoFrame = async (deviceId: string) => {
+    const current = viewDataStore.getPhotoFrame(deviceId)
+    if (current) {
+      await pushDevice(deviceId)
+      return
+    }
+
+    const hasPushedPhoto = await refreshDevice(deviceId)
+    if (!hasPushedPhoto) {
+      await pushDevice(deviceId)
     }
   }
 
@@ -273,6 +302,7 @@ export const createPhotoFrameAdapter = ({
 
   return {
     refreshDevice,
+    showPhotoFrame,
     showNextPhoto,
     showPreviousPhoto,
     close: () => {

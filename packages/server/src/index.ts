@@ -633,10 +633,27 @@ const main = async () => {
         }
         if (route.kind === "view") {
           if (getIsViewName(payload)) {
-            await pushController.setView({
-              deviceId: route.deviceId,
-              viewName: payload,
-            })
+            if (
+              payload === "Photo Frame" &&
+              photoFrameAdapter
+            ) {
+              // Switching into Photo Frame must (re)fetch using the
+              // already-configured people/query — a bare push would only
+              // repaint stale/absent bytes and wrongly show the "configure
+              // in Home Assistant" placeholder.
+              deviceStore.setActiveView({
+                deviceId: route.deviceId,
+                viewName: payload,
+              })
+              await photoFrameAdapter.showPhotoFrame(
+                route.deviceId,
+              )
+            } else {
+              await pushController.setView({
+                deviceId: route.deviceId,
+                viewName: payload,
+              })
+            }
           }
           return
         }
@@ -656,7 +673,21 @@ const main = async () => {
               viewName: payload,
               isExplicit: false,
             })
-            await pushController.pushDevice(route.deviceId)
+            if (
+              payload === "Photo Frame" &&
+              photoFrameAdapter
+            ) {
+              // Boot-time restore into Photo Frame: fetch straight away
+              // instead of waiting up to a full interval tick, so the panel
+              // never shows the placeholder while people/query are set.
+              await photoFrameAdapter.showPhotoFrame(
+                route.deviceId,
+              )
+            } else {
+              await pushController.pushDevice(
+                route.deviceId,
+              )
+            }
           }
           return
         }
