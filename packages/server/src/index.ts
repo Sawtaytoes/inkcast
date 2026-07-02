@@ -10,7 +10,10 @@ import {
 } from "./adapters/nowPlayingAdapter.ts"
 import { createPhotoFrameAdapter } from "./adapters/photoFrameAdapter.ts"
 import { createApp } from "./app.ts"
-import { loadConfig } from "./config/env.ts"
+import {
+  type ConfiguredDevice,
+  loadConfig,
+} from "./config/env.ts"
 import {
   buildAvailabilityTopic,
   buildDeviceTopics,
@@ -64,6 +67,32 @@ const getIsDitherAlgorithm = (
 ): value is DitherAlgorithm =>
   (DITHER_ALGORITHMS as readonly string[]).includes(value)
 
+/** Parse + clamp an HA number-entity payload ("50".."200", % steps). */
+const parsePercentPayload = (payload: string) => {
+  const value = Number.parseFloat(payload)
+  if (Number.isNaN(value)) {
+    return null
+  }
+  return Math.min(200, Math.max(50, Math.round(value)))
+}
+
+/**
+ * One HA-editable config knob: how its MQTT payload is validated/normalized
+ * into the config store, and what to do after a user change. The retained
+ * state topic doubles as boot-time persistence (`restore`).
+ */
+type ConfigKnob = {
+  /** Store the (valid) payload; returns the normalized retained-state payload, or null to reject. */
+  applyPayload: (params: {
+    deviceId: string
+    payload: string
+  }) => string | null
+  /** Whether the store already has a value (blocks the boot-time restore). */
+  getHasValue: (deviceId: string) => boolean
+  /** Re-render / re-fetch after a user change (not after a restore). */
+  onApplied?: (deviceId: string) => Promise<void>
+}
+
 const main = async () => {
   loadEnvironmentFile()
 
@@ -90,9 +119,19 @@ const main = async () => {
     renderService,
     publisher,
     baseTopic,
+    idleMinutes: config.idleMinutes,
   })
 
-  /** Push every device whose active view matches, without awaiting. */
+  const pushDeviceLogged = (deviceId: string) => {
+    pushController.pushDevice(deviceId).catch((error) => {
+      console.error(
+        `[inkcast] push failed for ${deviceId}`,
+        error,
+      )
+    })
+  }
+
+  /** Push every device whose SELECTED view matches, without awaiting. */
   const pushDevicesShowingView = ({
     getIsViewIncluded,
     entityKey,
@@ -112,22 +151,17 @@ const main = async () => {
               FOLLOWED_NOW_PLAYING_KEY) === entityKey),
       )
       .forEach((device) => {
-        pushController
-          .pushDevice(device.id)
-          .catch((error) => {
-            console.error(
-              `[inkcast] push failed for ${device.id}`,
-              error,
-            )
-          })
+        pushDeviceLogged(device.id)
       })
   }
 
   // Phase-2 now-playing adapter: stream media_player entities from Home
   // Assistant and re-push affected devices on change. Devices with a pinned
   // nowPlayingEntityId watch that entity; devices without one follow the
-  // most recently active Music Assistant player. Disabled unless
-  // HOME_ASSISTANT_URL + HOME_ASSISTANT_TOKEN are set.
+  // most recently active player from the followed platforms (minus the
+  // excluded ones — e.g. an all-night bedtime-music speaker). The same
+  // connection streams the weather entity for the clock views. Disabled
+  // unless HOME_ASSISTANT_URL + HOME_ASSISTANT_TOKEN are set.
   const pinnedEntityIds = Array.from(
     new Set(
       config.devices
@@ -154,6 +188,10 @@ const main = async () => {
         followedPlatforms: hasUnpinnedDevice
           ? config.homeAssistant.followedPlatforms
           : [],
+        followExcludedEntityIds:
+          config.homeAssistant.followExcludedEntityIds,
+        weatherEntityId:
+          config.homeAssistant.weatherEntityId,
         viewDataStore,
         onNowPlayingChanged: (entityKey) => {
           pushDevicesShowingView({
@@ -161,20 +199,46 @@ const main = async () => {
             entityKey,
           })
         },
+        onWeatherChanged: () => {
+          config.devices
+            .filter(
+              (device) =>
+                pushController.getEffectiveView(
+                  device.id,
+                ) === "Clock (Weather)",
+            )
+            .forEach((device) => {
+              pushDeviceLogged(device.id)
+            })
+        },
       })
     : null
 
-  // Keep clock-bearing panels on real time: re-push them each minute.
+  // Each minute: keep clock-bearing panels on real time, and catch
+  // idle-fallback transitions (a now-playing selection whose effective view
+  // changed since the last render — in either direction).
   const clockTicker = startClockTicker({
     onMinuteTick: () => {
-      pushDevicesShowingView({
-        getIsViewIncluded: getIsClockBearingView,
+      config.devices.forEach((device) => {
+        const effectiveView =
+          pushController.getEffectiveView(device.id)
+        const hasViewChanged =
+          effectiveView !==
+          deviceStore.getLastRenderedView(device.id)
+        if (
+          getIsClockBearingView(effectiveView) ||
+          hasViewChanged
+        ) {
+          pushDeviceLogged(device.id)
+        }
       })
     },
   })
 
-  // Immich photo frame: rotates a random photo of the configured people on
-  // an interval. Enabled only when Immich credentials are set.
+  // Immich photo frame: rotates a recency-weighted random photo of the
+  // configured people/query on an interval — for devices SHOWING the Photo
+  // Frame (selected or idle-fallback). Enabled only when Immich credentials
+  // are set.
   const hasPhotoFrameAdapter = Boolean(
     config.immich.url && config.immich.apiKey,
   )
@@ -185,14 +249,25 @@ const main = async () => {
           apiKey: config.immich.apiKey,
         },
         intervalMinutes: config.immich.intervalMinutes,
+        recencyHalfLifeDays:
+          config.immich.recencyHalfLifeDays,
         devices: config.devices,
-        deviceStore,
         deviceConfigStore,
         viewDataStore,
+        getEffectiveView: pushController.getEffectiveView,
         pushDevice: (deviceId) =>
           pushController.pushDevice(deviceId),
       })
     : null
+
+  /** Clear the current photo and fetch a fresh one (people/query changed). */
+  const restartPhotoFrame = async (deviceId: string) => {
+    viewDataStore.setPhotoFrame({
+      deviceId,
+      data: undefined,
+    })
+    await photoFrameAdapter?.refreshDevice(deviceId)
+  }
 
   if (publisher.isEnabled) {
     // Advertise every device to HA (retained discovery configs).
@@ -216,23 +291,203 @@ const main = async () => {
       ),
     )
 
-    // Map each command/config topic back to a device + action, then
-    // subscribe. The retained photo-people STATE topic is also subscribed:
-    // it restores the HA-edited config after a server restart (retained MQTT
-    // is the persistence layer — no config file needed).
-    const commandRoutes = new Map<
-      string,
-      {
-        deviceId: string
-        kind:
-          | "refresh"
-          | "view"
-          | "photoPeople"
-          | "photoPeopleRestore"
-          | "dither"
-          | "ditherRestore"
+    // The HA-editable config knobs, all following one shape: a command
+    // topic (user edits), a retained state topic (HA display + boot-time
+    // restore — retained MQTT is the persistence layer, no config file).
+    const configKnobs: ReadonlyMap<string, ConfigKnob> =
+      new Map([
+        [
+          "photoPeople",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              deviceConfigStore.setPhotoPeople({
+                deviceId,
+                peopleText: payload,
+              })
+              return payload
+            },
+            getHasValue: (deviceId) =>
+              Boolean(
+                deviceConfigStore.getPhotoPeople(deviceId),
+              ),
+            onApplied: restartPhotoFrame,
+          },
+        ],
+        [
+          "photoQuery",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              deviceConfigStore.setPhotoQuery({
+                deviceId,
+                queryText: payload,
+              })
+              return payload
+            },
+            getHasValue: (deviceId) =>
+              Boolean(
+                deviceConfigStore.getPhotoQuery(deviceId),
+              ),
+            onApplied: restartPhotoFrame,
+          },
+        ],
+        [
+          "dither",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              if (!getIsDitherAlgorithm(payload)) {
+                return null
+              }
+              deviceConfigStore.setDitherAlgorithm({
+                deviceId,
+                algorithm: payload,
+              })
+              return payload
+            },
+            getHasValue: (deviceId) =>
+              Boolean(
+                deviceConfigStore.getDitherAlgorithm(
+                  deviceId,
+                ),
+              ),
+            onApplied: async (deviceId) => {
+              await pushController.pushDevice(deviceId)
+            },
+          },
+        ],
+        [
+          "colourMode",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              if (
+                payload !== "Color" &&
+                payload !== "Black & White"
+              ) {
+                return null
+              }
+              deviceConfigStore.setColourModeOverride({
+                deviceId,
+                colourMode:
+                  payload === "Color" ? "color" : "bw",
+              })
+              return payload
+            },
+            getHasValue: (deviceId) =>
+              deviceConfigStore.getColourModeOverride(
+                deviceId,
+              ) !== undefined,
+            onApplied: async (deviceId) => {
+              await pushController.pushDevice(deviceId)
+            },
+          },
+        ],
+        [
+          "brightness",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              const percent = parsePercentPayload(payload)
+              if (percent === null) {
+                return null
+              }
+              deviceConfigStore.setBrightnessPercent({
+                deviceId,
+                percent,
+              })
+              return String(percent)
+            },
+            getHasValue: (deviceId) =>
+              deviceConfigStore.getBrightnessPercent(
+                deviceId,
+              ) !== undefined,
+            onApplied: async (deviceId) => {
+              await pushController.pushDevice(deviceId)
+            },
+          },
+        ],
+        [
+          "saturation",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              const percent = parsePercentPayload(payload)
+              if (percent === null) {
+                return null
+              }
+              deviceConfigStore.setSaturationPercent({
+                deviceId,
+                percent,
+              })
+              return String(percent)
+            },
+            getHasValue: (deviceId) =>
+              deviceConfigStore.getSaturationPercent(
+                deviceId,
+              ) !== undefined,
+            onApplied: async (deviceId) => {
+              await pushController.pushDevice(deviceId)
+            },
+          },
+        ],
+      ])
+
+    /** Knob kind → its command/state topics for one device. */
+    const getKnobTopics = ({
+      device,
+      kind,
+    }: {
+      device: ConfiguredDevice
+      kind: string
+    }) => {
+      const topics = buildDeviceTopics({
+        baseTopic,
+        device,
+      })
+      const byKind: Record<
+        string,
+        { command: string; state: string }
+      > = {
+        photoPeople: {
+          command: topics.photoPeopleCommand,
+          state: topics.photoPeopleState,
+        },
+        photoQuery: {
+          command: topics.photoQueryCommand,
+          state: topics.photoQueryState,
+        },
+        dither: {
+          command: topics.ditherCommand,
+          state: topics.ditherState,
+        },
+        colourMode: {
+          command: topics.colourModeCommand,
+          state: topics.colourModeState,
+        },
+        brightness: {
+          command: topics.brightnessCommand,
+          state: topics.brightnessState,
+        },
+        saturation: {
+          command: topics.saturationCommand,
+          state: topics.saturationState,
+        },
       }
-    >()
+      return byKind[kind]
+    }
+
+    type TopicRoute = {
+      deviceId: string
+      kind:
+        | "refresh"
+        | "view"
+        | "viewRestore"
+        | "photoNext"
+        | "photoPrevious"
+        | "knob"
+      /** Set when kind is "knob". */
+      knobKind?: string
+      /** True for a knob's retained-state (boot restore) topic. */
+      isRestore?: boolean
+    }
+
+    const commandRoutes = new Map<string, TopicRoute>()
     config.devices.forEach((device) => {
       const topics = buildDeviceTopics({
         baseTopic,
@@ -246,21 +501,36 @@ const main = async () => {
         deviceId: device.id,
         kind: "view",
       })
-      commandRoutes.set(topics.photoPeopleCommand, {
+      // The retained view state restores the pre-restart selection.
+      commandRoutes.set(topics.viewState, {
         deviceId: device.id,
-        kind: "photoPeople",
+        kind: "viewRestore",
       })
-      commandRoutes.set(topics.photoPeopleState, {
+      commandRoutes.set(topics.photoNextCommand, {
         deviceId: device.id,
-        kind: "photoPeopleRestore",
+        kind: "photoNext",
       })
-      commandRoutes.set(topics.ditherCommand, {
+      commandRoutes.set(topics.photoPreviousCommand, {
         deviceId: device.id,
-        kind: "dither",
+        kind: "photoPrevious",
       })
-      commandRoutes.set(topics.ditherState, {
-        deviceId: device.id,
-        kind: "ditherRestore",
+      Array.from(configKnobs.keys()).forEach((knobKind) => {
+        const knobTopics = getKnobTopics({
+          device,
+          kind: knobKind,
+        })
+        commandRoutes.set(knobTopics.command, {
+          deviceId: device.id,
+          kind: "knob",
+          knobKind,
+          isRestore: false,
+        })
+        commandRoutes.set(knobTopics.state, {
+          deviceId: device.id,
+          kind: "knob",
+          knobKind,
+          isRestore: true,
+        })
       })
     })
 
@@ -271,85 +541,89 @@ const main = async () => {
         if (!route) {
           return
         }
+
         if (route.kind === "refresh") {
           await pushController.pushDevice(route.deviceId)
-        } else if (route.kind === "photoPeople") {
-          const device = pushController.deviceById.get(
-            route.deviceId,
-          )
-          if (!device) {
-            return
-          }
-          deviceConfigStore.setPhotoPeople({
-            deviceId: route.deviceId,
-            peopleText: payload,
-          })
-          // Retained state = HA display + restart persistence.
-          await publisher.publish({
-            topic: buildDeviceTopics({
-              baseTopic,
-              device,
-            }).photoPeopleState,
-            payload,
-            isRetained: true,
-          })
-          // New people = new pool; fetch a fresh photo right away.
-          viewDataStore.setPhotoFrame({
-            deviceId: route.deviceId,
-            data: undefined,
-          })
-          await photoFrameAdapter?.refreshDevice(
-            route.deviceId,
-          )
-        } else if (route.kind === "photoPeopleRestore") {
-          if (
-            !deviceConfigStore.getPhotoPeople(
-              route.deviceId,
-            )
-          ) {
-            deviceConfigStore.setPhotoPeople({
+          return
+        }
+        if (route.kind === "view") {
+          if (getIsViewName(payload)) {
+            await pushController.setView({
               deviceId: route.deviceId,
-              peopleText: payload,
+              viewName: payload,
             })
           }
-        } else if (route.kind === "dither") {
-          const device = pushController.deviceById.get(
-            route.deviceId,
-          )
-          if (!device || !getIsDitherAlgorithm(payload)) {
-            return
-          }
-          deviceConfigStore.setDitherAlgorithm({
-            deviceId: route.deviceId,
-            algorithm: payload,
-          })
-          await publisher.publish({
-            topic: buildDeviceTopics({
-              baseTopic,
-              device,
-            }).ditherState,
-            payload,
-            isRetained: true,
-          })
-          await pushController.pushDevice(route.deviceId)
-        } else if (route.kind === "ditherRestore") {
+          return
+        }
+        if (route.kind === "viewRestore") {
+          // Boot-time restore of the last selection from the retained
+          // topic; explicit selections made this run always win.
           if (
-            !deviceConfigStore.getDitherAlgorithm(
+            getIsViewName(payload) &&
+            !deviceStore.getHasExplicitView(
               route.deviceId,
             ) &&
-            getIsDitherAlgorithm(payload)
+            payload !==
+              deviceStore.getActiveView(route.deviceId)
           ) {
-            deviceConfigStore.setDitherAlgorithm({
+            deviceStore.setActiveView({
               deviceId: route.deviceId,
-              algorithm: payload,
+              viewName: payload,
+              isExplicit: false,
+            })
+            await pushController.pushDevice(route.deviceId)
+          }
+          return
+        }
+        if (route.kind === "photoNext") {
+          await photoFrameAdapter?.showNextPhoto(
+            route.deviceId,
+          )
+          return
+        }
+        if (route.kind === "photoPrevious") {
+          await photoFrameAdapter?.showPreviousPhoto(
+            route.deviceId,
+          )
+          return
+        }
+
+        const knobKind = route.knobKind
+        if (!knobKind) {
+          return
+        }
+        const knob = configKnobs.get(knobKind)
+        const device = pushController.deviceById.get(
+          route.deviceId,
+        )
+        if (!knob || !device) {
+          return
+        }
+        if (route.isRestore) {
+          if (!knob.getHasValue(route.deviceId)) {
+            knob.applyPayload({
+              deviceId: route.deviceId,
+              payload,
             })
           }
-        } else if (getIsViewName(payload)) {
-          await pushController.setView({
-            deviceId: route.deviceId,
-            viewName: payload,
-          })
+          return
         }
+        const normalizedPayload = knob.applyPayload({
+          deviceId: route.deviceId,
+          payload,
+        })
+        if (normalizedPayload === null) {
+          return
+        }
+        await publisher.publish({
+          topic: getKnobTopics({
+            device,
+            kind: knobKind,
+          }).state,
+          payload: normalizedPayload,
+          isRetained: true,
+        })
+        await knob.onApplied?.(route.deviceId)
       },
     })
 
@@ -360,29 +634,69 @@ const main = async () => {
       ),
     )
 
-    // Seed the Dither select with the registry default for devices with no
-    // retained override yet (the retained restore, if any, lands within the
+    // Seed the config entities' retained state with defaults for devices
+    // with no retained value yet (any retained restore lands within the
     // first seconds of the subscription — hence the delay).
     setTimeout(() => {
-      config.devices
-        .filter(
-          (device) =>
-            !deviceConfigStore.getDitherAlgorithm(
-              device.id,
+      config.devices.forEach((device) => {
+        const seedPairs: readonly {
+          kind: string
+          hasValue: boolean
+          payload: string
+        }[] = [
+          {
+            kind: "dither",
+            hasValue: Boolean(
+              deviceConfigStore.getDitherAlgorithm(
+                device.id,
+              ),
             ),
-        )
-        .forEach((device) => {
-          publisher
-            .publish({
-              topic: buildDeviceTopics({
-                baseTopic,
-                device,
-              }).ditherState,
-              payload: device.ditherProfile.algorithm,
-              isRetained: true,
-            })
-            .catch(() => {})
-        })
+            payload: device.ditherProfile.algorithm,
+          },
+          ...(device.colourMode === "e6"
+            ? [
+                {
+                  kind: "colourMode",
+                  hasValue:
+                    deviceConfigStore.getColourModeOverride(
+                      device.id,
+                    ) !== undefined,
+                  payload: "Color",
+                },
+              ]
+            : []),
+          {
+            kind: "brightness",
+            hasValue:
+              deviceConfigStore.getBrightnessPercent(
+                device.id,
+              ) !== undefined,
+            payload: "100",
+          },
+          {
+            kind: "saturation",
+            hasValue:
+              deviceConfigStore.getSaturationPercent(
+                device.id,
+              ) !== undefined,
+            payload: "100",
+          },
+        ]
+        seedPairs
+          .filter((seedPair) => !seedPair.hasValue)
+          .forEach((seedPair) => {
+            publisher
+              .publish({
+                topic: getKnobTopics({
+                  device,
+                  kind: seedPair.kind,
+                }).state,
+                payload: seedPair.payload,
+                isRetained: true,
+              })
+              .catch(() => {})
+          })
+      })
     }, 5_000)
   }
 

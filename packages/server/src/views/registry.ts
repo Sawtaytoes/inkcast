@@ -1,5 +1,6 @@
 import type { DeviceMetadata } from "@inkcast/core/devices/device"
 import { ClockView } from "@inkcast/views/ClockView"
+import { ClockWeatherView } from "@inkcast/views/ClockWeatherView"
 import { NowPlayingDashboard } from "@inkcast/views/NowPlayingDashboard"
 import { NowPlayingEditorial } from "@inkcast/views/NowPlayingEditorial"
 import { NowPlayingPoster } from "@inkcast/views/NowPlayingPoster"
@@ -9,6 +10,7 @@ import { IDLE_NOW_PLAYING } from "../adapters/nowPlayingAdapter.ts"
 import type {
   NowPlayingData,
   PhotoFrameData,
+  WeatherData,
 } from "../state/viewDataStore.ts"
 
 /**
@@ -26,6 +28,7 @@ export const VIEW_NAMES = [
   "Now Playing (Poster)",
   "Photo Frame",
   "Clock",
+  "Clock (Weather)",
 ] as const
 export type ViewName = (typeof VIEW_NAMES)[number]
 
@@ -38,7 +41,11 @@ const NOW_PLAYING_VIEW_NAMES: ReadonlySet<ViewName> =
 
 /** Views that display the time and need the minute re-push. */
 const CLOCK_BEARING_VIEW_NAMES: ReadonlySet<ViewName> =
-  new Set(["Now Playing (Dashboard)", "Clock"])
+  new Set([
+    "Now Playing (Dashboard)",
+    "Clock",
+    "Clock (Weather)",
+  ])
 
 export const getIsViewName = (
   value: string,
@@ -97,12 +104,14 @@ export const renderViewElement = ({
   now,
   nowPlaying,
   photoFrame,
+  weather,
 }: {
   viewName: ViewName
   device: DeviceMetadata
   now: Date
   nowPlaying?: NowPlayingData
   photoFrame?: PhotoFrameData
+  weather?: WeatherData
 }): ReactElement => {
   const panel = {
     width: device.width,
@@ -110,12 +119,27 @@ export const renderViewElement = ({
     colourMode: device.colourMode,
   }
   const nowPlayingProps = nowPlaying ?? IDLE_NOW_PLAYING
+  const isCompactClock =
+    device.height <= COMPACT_PANEL_MAX_HEIGHT
 
   if (viewName === "Clock") {
     return createElement(ClockView, {
       ...panel,
       time: formatTime(now),
       date: formatDate(now),
+    })
+  }
+  if (viewName === "Clock (Weather)") {
+    return createElement(ClockWeatherView, {
+      ...panel,
+      time: isCompactClock
+        ? formatCompactTime(now)
+        : formatTime(now),
+      date: isCompactClock
+        ? formatCompactDate(now)
+        : formatDate(now),
+      temperatureText: weather?.temperatureText,
+      conditionText: weather?.conditionText,
     })
   }
   if (viewName === "Photo Frame") {

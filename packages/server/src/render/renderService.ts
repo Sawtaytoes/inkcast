@@ -1,4 +1,5 @@
 import type { DeviceMetadata } from "@inkcast/core/devices/device"
+import type { DitherAdjustments } from "@inkcast/core/pipeline/dither"
 import { createChromiumEngine } from "@inkcast/render/chromiumEngine"
 import type { RenderEngine } from "@inkcast/render/engine"
 import { renderDeviceImage } from "@inkcast/render/renderDeviceImage"
@@ -6,6 +7,7 @@ import { createSatoriEngine } from "@inkcast/render/satoriEngine"
 import type {
   NowPlayingData,
   PhotoFrameData,
+  WeatherData,
 } from "../state/viewDataStore.ts"
 import {
   renderViewElement,
@@ -23,6 +25,8 @@ export type RenderService = {
     viewName: ViewName
     nowPlaying?: NowPlayingData
     photoFrame?: PhotoFrameData
+    weather?: WeatherData
+    adjustments?: DitherAdjustments
   }) => Promise<Buffer>
   close: () => Promise<void>
 }
@@ -46,6 +50,8 @@ export const createRenderService = async ({
       viewName,
       nowPlaying,
       photoFrame,
+      weather,
+      adjustments,
     }) =>
       renderDeviceImage({
         engine,
@@ -55,8 +61,10 @@ export const createRenderService = async ({
           now: new Date(),
           nowPlaying,
           photoFrame,
+          weather,
         }),
         device,
+        adjustments,
       }),
     close: async () => {
       await engine.close?.()

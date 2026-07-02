@@ -52,9 +52,19 @@ const EnvSchema = z.object({
     z.string(),
     "music_assistant,plex",
   ),
+  HOME_ASSISTANT_FOLLOW_EXCLUDE_ENTITIES: z._default(
+    z.string(),
+    "",
+  ),
+  HOME_ASSISTANT_WEATHER_ENTITY: z._default(z.string(), ""),
   IMMICH_URL: z._default(z.string(), ""),
   IMMICH_API_TOKEN: z._default(z.string(), ""),
   INKCAST_PHOTO_MINUTES: z._default(z.coerce.number(), 10),
+  INKCAST_PHOTO_RECENCY_HALF_LIFE_DAYS: z._default(
+    z.coerce.number(),
+    365,
+  ),
+  INKCAST_IDLE_MINUTES: z._default(z.coerce.number(), 5),
 })
 
 /**
@@ -85,6 +95,7 @@ const DeviceConfigSchema = z.object({
     { algorithm: "floyd-steinberg", supersampleFactor: 2 },
   ),
   nowPlayingEntityId: z.optional(z.string()),
+  idleViewName: z.optional(z.string()),
 })
 
 /**
@@ -137,6 +148,13 @@ export type HomeAssistantConfig = {
   token: string
   /** Integrations whose players the follow mode tracks. */
   followedPlatforms: readonly string[]
+  /**
+   * Players follow mode must IGNORE even when playing (e.g. a bedtime-music
+   * speaker that would otherwise hold every panel hostage all night).
+   */
+  followExcludedEntityIds: readonly string[]
+  /** HA weather entity feeding the weather-bearing clock view ("" = off). */
+  weatherEntityId: string
 }
 
 export type ImmichSettings = {
@@ -144,6 +162,8 @@ export type ImmichSettings = {
   apiKey: string
   /** Photo-frame rotation interval, minutes. */
   intervalMinutes: number
+  /** Recency-weighting half-life for the random photo pick, days. */
+  recencyHalfLifeDays: number
 }
 
 export type InkcastConfig = {
@@ -154,6 +174,8 @@ export type InkcastConfig = {
   mqtt: MqttConfig
   homeAssistant: HomeAssistantConfig
   immich: ImmichSettings
+  /** Minutes of nothing-playing before a now-playing view falls back idle. */
+  idleMinutes: number
 }
 
 /** Parse + validate configuration from `process.env`. Throws on bad input. */
@@ -195,11 +217,21 @@ export const loadConfig = (
         parsed.HOME_ASSISTANT_FOLLOW_PLATFORMS.split(",")
           .map((platform) => platform.trim())
           .filter((platform) => platform.length > 0),
+      followExcludedEntityIds:
+        parsed.HOME_ASSISTANT_FOLLOW_EXCLUDE_ENTITIES.split(
+          ",",
+        )
+          .map((entityId) => entityId.trim())
+          .filter((entityId) => entityId.length > 0),
+      weatherEntityId: parsed.HOME_ASSISTANT_WEATHER_ENTITY,
     },
     immich: {
       url: parsed.IMMICH_URL,
       apiKey: parsed.IMMICH_API_TOKEN,
       intervalMinutes: parsed.INKCAST_PHOTO_MINUTES,
+      recencyHalfLifeDays:
+        parsed.INKCAST_PHOTO_RECENCY_HALF_LIFE_DAYS,
     },
+    idleMinutes: parsed.INKCAST_IDLE_MINUTES,
   }
 }

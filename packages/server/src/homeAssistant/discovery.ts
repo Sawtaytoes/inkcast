@@ -60,10 +60,26 @@ export const buildDeviceTopics = ({
     lastRender: `${base}/last_render`,
     photoPeopleCommand: `${base}/photo_people/set`,
     photoPeopleState: `${base}/photo_people`,
+    photoQueryCommand: `${base}/photo_query/set`,
+    photoQueryState: `${base}/photo_query`,
+    photoNextCommand: `${base}/photo_next/set`,
+    photoPreviousCommand: `${base}/photo_previous/set`,
     ditherCommand: `${base}/dither/set`,
     ditherState: `${base}/dither`,
+    colourModeCommand: `${base}/colour_mode/set`,
+    colourModeState: `${base}/colour_mode`,
+    brightnessCommand: `${base}/brightness/set`,
+    brightnessState: `${base}/brightness`,
+    saturationCommand: `${base}/saturation/set`,
+    saturationState: `${base}/saturation`,
   }
 }
+
+/** The HA-facing colour-mode option strings (double as MQTT payloads). */
+export const COLOUR_MODE_OPTIONS = [
+  "Color",
+  "Black & White",
+] as const
 
 /** The HA `device` block that ties every entity to one physical display. */
 const buildDeviceBlock = (device: DeviceMetadata) => ({
@@ -149,13 +165,14 @@ export const buildDiscoveryMessages = ({
       },
     },
     {
-      // A config-category select: which dithering algorithm this panel
-      // uses (overrides the registry default; retained = persisted).
+      // Config entities are name-prefixed by what they affect ("Display:",
+      // "Photo Frame:") — HA has no custom config sub-sections, so the
+      // prefix is what groups them on the device page.
       topic: discoveryTopic("select", "dither"),
       isRetained: true,
       payload: {
         ...availability,
-        name: "Dither",
+        name: "Display: Dither",
         unique_id: `inkcast_${device.id}_dither`,
         options: Array.from(DITHER_ALGORITHMS),
         command_topic: topics.ditherCommand,
@@ -164,19 +181,113 @@ export const buildDiscoveryMessages = ({
         device: deviceBlock,
       },
     },
+    // B&W-on-a-colour-panel only makes sense on colour hardware.
+    ...(device.colourMode === "e6"
+      ? [
+          {
+            topic: discoveryTopic("select", "colour_mode"),
+            isRetained: true as const,
+            payload: {
+              ...availability,
+              name: "Display: Color mode",
+              unique_id: `inkcast_${device.id}_colour_mode`,
+              options: Array.from(COLOUR_MODE_OPTIONS),
+              command_topic: topics.colourModeCommand,
+              state_topic: topics.colourModeState,
+              entity_category: "config",
+              device: deviceBlock,
+            },
+          },
+        ]
+      : []),
     {
-      // A config-category text entity: which Immich people feed this
-      // device's Photo Frame view (comma-separated names or person UUIDs).
-      // The retained state topic doubles as the persistence layer.
+      // Pre-dither brightness boost (e-ink panels read dark).
+      topic: discoveryTopic("number", "brightness"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Display: Brightness",
+        unique_id: `inkcast_${device.id}_brightness`,
+        command_topic: topics.brightnessCommand,
+        state_topic: topics.brightnessState,
+        min: 50,
+        max: 200,
+        step: 5,
+        unit_of_measurement: "%",
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
+      topic: discoveryTopic("number", "saturation"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Display: Saturation",
+        unique_id: `inkcast_${device.id}_saturation`,
+        command_topic: topics.saturationCommand,
+        state_topic: topics.saturationState,
+        min: 50,
+        max: 200,
+        step: 5,
+        unit_of_measurement: "%",
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
+      // Which Immich people feed this device's Photo Frame view
+      // (comma-separated names or person UUIDs). The retained state topic
+      // doubles as the persistence layer.
       topic: discoveryTopic("text", "photo_people"),
       isRetained: true,
       payload: {
         ...availability,
-        name: "Photo Frame People",
+        name: "Photo Frame: People",
         unique_id: `inkcast_${device.id}_photo_people`,
         command_topic: topics.photoPeopleCommand,
         state_topic: topics.photoPeopleState,
         entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
+      // Free-text Immich smart-search query ("green shirt"). Combines with
+      // the people list; automatable from HA (holiday themes, bedtime
+      // rotations, presence-driven switches).
+      topic: discoveryTopic("text", "photo_query"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Photo Frame: Query",
+        unique_id: `inkcast_${device.id}_photo_query`,
+        command_topic: topics.photoQueryCommand,
+        state_topic: topics.photoQueryState,
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
+      topic: discoveryTopic("button", "photo_next"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Photo Frame: Next photo",
+        unique_id: `inkcast_${device.id}_photo_next`,
+        command_topic: topics.photoNextCommand,
+        payload_press: "next",
+        device: deviceBlock,
+      },
+    },
+    {
+      topic: discoveryTopic("button", "photo_previous"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Photo Frame: Previous photo",
+        unique_id: `inkcast_${device.id}_photo_previous`,
+        command_topic: topics.photoPreviousCommand,
+        payload_press: "previous",
         device: deviceBlock,
       },
     },

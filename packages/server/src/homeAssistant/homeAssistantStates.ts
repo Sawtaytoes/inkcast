@@ -52,6 +52,7 @@ export const observeHomeAssistantEntityStates = ({
   token,
   entityIds,
   followedPlatforms,
+  followExcludedEntityIds = [],
 }: {
   url: string
   token: string
@@ -62,9 +63,14 @@ export const observeHomeAssistantEntityStates = ({
    * lookup), e.g. music_assistant + plex. Empty = follow mode off.
    */
   followedPlatforms: readonly string[]
+  /** Players excluded from follow mode (still watchable when pinned). */
+  followExcludedEntityIds?: readonly string[]
 }): Observable<HomeAssistantEntityState> => {
   const pinnedEntityIds = new Set(entityIds)
   const followedPlatformSet = new Set(followedPlatforms)
+  const followExcludedEntityIdSet = new Set(
+    followExcludedEntityIds,
+  )
 
   return new Observable<HomeAssistantEntityState>(
     (subscriber) => {
@@ -144,7 +150,12 @@ export const observeHomeAssistantEntityStates = ({
             .filter(
               (entry) =>
                 followedPlatformSet.has(entry.platform) &&
-                entry.entity_id.startsWith("media_player."),
+                entry.entity_id.startsWith(
+                  "media_player.",
+                ) &&
+                !followExcludedEntityIdSet.has(
+                  entry.entity_id,
+                ),
             )
             .forEach((entry) => {
               followedEntityIds.add(entry.entity_id)

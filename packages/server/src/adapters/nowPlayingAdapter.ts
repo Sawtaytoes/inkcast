@@ -18,6 +18,7 @@ import {
 import type {
   NowPlayingData,
   ViewDataStore,
+  WeatherData,
 } from "../state/viewDataStore.ts"
 
 /** What the now-playing view shows when nothing has played on the entity. */
@@ -113,6 +114,51 @@ export const mapHomeAssistantStateToNowPlaying = (
   }
 }
 
+/** HA weather-entity condition codes → panel-friendly text. */
+const WEATHER_CONDITION_TEXT: Record<string, string> = {
+  "clear-night": "Clear night",
+  cloudy: "Cloudy",
+  exceptional: "Severe weather",
+  fog: "Fog",
+  hail: "Hail",
+  lightning: "Lightning",
+  "lightning-rainy": "Thunderstorms",
+  partlycloudy: "Partly cloudy",
+  pouring: "Pouring",
+  rainy: "Rainy",
+  snowy: "Snowy",
+  "snowy-rainy": "Sleet",
+  sunny: "Sunny",
+  windy: "Windy",
+  "windy-variant": "Windy",
+}
+
+/**
+ * Maps one HA `weather` entity state to the clock view's weather data, or
+ * null when the entity is unavailable / has no temperature yet.
+ */
+export const mapHomeAssistantStateToWeather = (
+  entityState: Pick<
+    HomeAssistantEntityState,
+    "state" | "attributes"
+  >,
+): WeatherData | null => {
+  const temperature = entityState.attributes.temperature
+  if (typeof temperature !== "number") {
+    return null
+  }
+
+  return {
+    temperatureText: `${Math.round(temperature)}°`,
+    conditionText:
+      WEATHER_CONDITION_TEXT[entityState.state] ??
+      (entityState.state === "unavailable" ||
+      entityState.state === "unknown"
+        ? ""
+        : entityState.state),
+  }
+}
+
 type NowPlayingUpdate = {
   entityId: string
   data: NowPlayingData
@@ -194,22 +240,39 @@ export const createNowPlayingAdapter = ({
   homeAssistantToken,
   pinnedEntityIds,
   followedPlatforms,
+  followExcludedEntityIds = [],
+  weatherEntityId = "",
   viewDataStore,
   onNowPlayingChanged,
+  onWeatherChanged = () => {},
 }: {
   homeAssistantUrl: string
   homeAssistantToken: string
   pinnedEntityIds: readonly string[]
   followedPlatforms: readonly string[]
+  /** Players follow mode ignores (bedtime speakers and the like). */
+  followExcludedEntityIds?: readonly string[]
+  /** HA `weather` entity to stream for the clock views ("" = off). */
+  weatherEntityId?: string
   viewDataStore: ViewDataStore
   onNowPlayingChanged: (entityKey: string) => void
+  onWeatherChanged?: () => void
 }) => {
-  const updates = observeHomeAssistantEntityStates({
+  const entityStates = observeHomeAssistantEntityStates({
     url: homeAssistantUrl,
     token: homeAssistantToken,
-    entityIds: pinnedEntityIds,
+    entityIds: weatherEntityId
+      ? pinnedEntityIds.concat(weatherEntityId)
+      : pinnedEntityIds,
     followedPlatforms,
-  }).pipe(
+    followExcludedEntityIds,
+  }).pipe(share())
+
+  const updates = entityStates.pipe(
+    filter(
+      (entityState) =>
+        entityState.entityId !== weatherEntityId,
+    ),
     map(
       (entityState): NowPlayingUpdate => ({
         entityId: entityState.entityId,
@@ -221,6 +284,30 @@ export const createNowPlayingAdapter = ({
     ),
     share(),
   )
+
+  const weatherSubscription = weatherEntityId
+    ? entityStates
+        .pipe(
+          filter(
+            (entityState) =>
+              entityState.entityId === weatherEntityId,
+          ),
+          map(mapHomeAssistantStateToWeather),
+          filter(
+            (weather): weather is WeatherData =>
+              weather !== null,
+          ),
+          distinctUntilChanged(
+            (previous, current) =>
+              JSON.stringify(previous) ===
+              JSON.stringify(current),
+          ),
+        )
+        .subscribe((weather) => {
+          viewDataStore.setWeather(weather)
+          onWeatherChanged()
+        })
+    : null
 
   const pinnedEntityIdSet = new Set(pinnedEntityIds)
   const pinnedUpdates = updates.pipe(
@@ -292,6 +379,7 @@ export const createNowPlayingAdapter = ({
   return {
     close: () => {
       subscription.unsubscribe()
+      weatherSubscription?.unsubscribe()
     },
   }
 }

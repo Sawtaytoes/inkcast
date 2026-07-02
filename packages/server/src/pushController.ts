@@ -1,3 +1,4 @@
+import { MONO_PALETTE } from "@inkcast/core/panels/palette"
 import { FOLLOWED_NOW_PLAYING_KEY } from "./adapters/nowPlayingAdapter.ts"
 import type { ConfiguredDevice } from "./config/env.ts"
 import { buildDeviceTopics } from "./homeAssistant/discovery.ts"
@@ -6,7 +7,11 @@ import type { RenderService } from "./render/renderService.ts"
 import type { DeviceConfigStore } from "./state/deviceConfigStore.ts"
 import type { DeviceStore } from "./state/deviceStore.ts"
 import type { ViewDataStore } from "./state/viewDataStore.ts"
-import type { ViewName } from "./views/registry.ts"
+import {
+  getIsNowPlayingView,
+  getIsViewName,
+  type ViewName,
+} from "./views/registry.ts"
 
 /**
  * The single place that renders a device's current view and pushes it to MQTT
@@ -14,9 +19,16 @@ import type { ViewName } from "./views/registry.ts"
  * MQTT command handler, and the data adapters so every path behaves
  * identically. When MQTT is disabled the publish calls no-op, so
  * `renderDevice` (the HTTP GET) still works.
+ *
+ * The view that actually renders is the EFFECTIVE view: the user's selection,
+ * except that a now-playing selection with nothing playing for the idle
+ * timeout falls back to the device's idle view (Clock (Weather) on the small
+ * panel, Photo Frame on the large one). The selection itself is untouched —
+ * playback resuming snaps the panel straight back.
  */
 export type PushController = {
   deviceById: Map<string, ConfiguredDevice>
+  getEffectiveView: (deviceId: string) => ViewName
   renderDevice: (deviceId: string) => Promise<Buffer | null>
   pushDevice: (deviceId: string) => Promise<boolean>
   setView: (params: {
@@ -33,6 +45,7 @@ export const createPushController = ({
   renderService,
   publisher,
   baseTopic,
+  idleMinutes,
 }: {
   devices: readonly ConfiguredDevice[]
   deviceStore: DeviceStore
@@ -41,10 +54,42 @@ export const createPushController = ({
   renderService: RenderService
   publisher: MqttPublisher
   baseTopic: string
+  idleMinutes: number
 }): PushController => {
   const deviceById = new Map(
     devices.map((device) => [device.id, device]),
   )
+  const idleMilliseconds = idleMinutes * 60_000
+
+  const getNowPlayingKey = (device: ConfiguredDevice) =>
+    device.nowPlayingEntityId ?? FOLLOWED_NOW_PLAYING_KEY
+
+  const getEffectiveView = (deviceId: string) => {
+    const device = deviceById.get(deviceId)
+    const activeView = deviceStore.getActiveView(deviceId)
+    if (
+      !device ||
+      !getIsNowPlayingView(activeView) ||
+      !device.idleViewName ||
+      !getIsViewName(device.idleViewName)
+    ) {
+      return activeView
+    }
+
+    const entry = viewDataStore.getNowPlayingEntry(
+      getNowPlayingKey(device),
+    )
+    if (entry?.data.isPlaying) {
+      return activeView
+    }
+
+    // No entry at all = the server has never seen playback: fall back
+    // immediately rather than showing a stale/placeholder card forever.
+    const stoppedAtMs = entry?.stoppedAtMs ?? 0
+    return Date.now() - stoppedAtMs >= idleMilliseconds
+      ? device.idleViewName
+      : activeView
+  }
 
   const renderDevice = async (deviceId: string) => {
     const device = deviceById.get(deviceId)
@@ -52,32 +97,62 @@ export const createPushController = ({
       return null
     }
 
-    // HA-selected dither algorithm overrides the registry default.
+    // HA-edited display config overrides the registry defaults.
     const ditherOverride =
       deviceConfigStore.getDitherAlgorithm(deviceId)
+    const isBlackAndWhite =
+      deviceConfigStore.getColourModeOverride(deviceId) ===
+      "bw"
+    const brightnessPercent =
+      deviceConfigStore.getBrightnessPercent(deviceId)
+    const saturationPercent =
+      deviceConfigStore.getSaturationPercent(deviceId)
+
+    const effectiveDevice = {
+      ...device,
+      ...(isBlackAndWhite
+        ? {
+            colourMode: "mono" as const,
+            palette: MONO_PALETTE,
+          }
+        : {}),
+      ditherProfile: {
+        ...device.ditherProfile,
+        ...(ditherOverride
+          ? { algorithm: ditherOverride }
+          : {}),
+      },
+    }
+
+    const hasAdjustments =
+      (brightnessPercent !== undefined &&
+        brightnessPercent !== 100) ||
+      (saturationPercent !== undefined &&
+        saturationPercent !== 100)
 
     return renderService.renderDevice({
-      device: ditherOverride
-        ? {
-            ...device,
-            ditherProfile: {
-              ...device.ditherProfile,
-              algorithm: ditherOverride,
-            },
-          }
-        : device,
-      viewName: deviceStore.getActiveView(deviceId),
+      device: effectiveDevice,
+      viewName: getEffectiveView(deviceId),
       // Unpinned devices follow the household's active player.
       nowPlaying: viewDataStore.getNowPlaying(
-        device.nowPlayingEntityId ??
-          FOLLOWED_NOW_PLAYING_KEY,
+        getNowPlayingKey(device),
       ),
       photoFrame: viewDataStore.getPhotoFrame(deviceId),
+      weather: viewDataStore.getWeather(),
+      ...(hasAdjustments
+        ? {
+            adjustments: {
+              brightness: (brightnessPercent ?? 100) / 100,
+              saturation: (saturationPercent ?? 100) / 100,
+            },
+          }
+        : {}),
     })
   }
 
   const pushDevice = async (deviceId: string) => {
     const device = deviceById.get(deviceId)
+    const effectiveView = getEffectiveView(deviceId)
     const image = await renderDevice(deviceId)
     if (!device || !image) {
       return false
@@ -86,7 +161,7 @@ export const createPushController = ({
     const topics = buildDeviceTopics({ baseTopic, device })
 
     console.log(
-      `[inkcast] push ${deviceId} (${deviceStore.getActiveView(deviceId)}, ${image.length} bytes)`,
+      `[inkcast] push ${deviceId} (${effectiveView}, ${image.length} bytes)`,
     )
     await publisher.publish({
       topic: topics.image,
@@ -102,6 +177,10 @@ export const createPushController = ({
       topic: topics.lastRender,
       payload: new Date().toISOString(),
       isRetained: true,
+    })
+    deviceStore.setLastRenderedView({
+      deviceId,
+      viewName: effectiveView,
     })
 
     return true
@@ -122,5 +201,11 @@ export const createPushController = ({
     return pushDevice(deviceId)
   }
 
-  return { deviceById, renderDevice, pushDevice, setView }
+  return {
+    deviceById,
+    getEffectiveView,
+    renderDevice,
+    pushDevice,
+    setView,
+  }
 }

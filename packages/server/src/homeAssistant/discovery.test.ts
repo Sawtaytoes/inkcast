@@ -1,4 +1,7 @@
-import { PHAT_DEVICE } from "@inkcast/core/devices/device"
+import {
+  IMPRESSION_DEVICE,
+  PHAT_DEVICE,
+} from "@inkcast/core/devices/device"
 import { describe, expect, test } from "vitest"
 import {
   buildAvailabilityTopic,
@@ -48,18 +51,43 @@ describe("buildDiscoveryMessages", () => {
     viewNames: ["Now Playing (Dashboard)", "Clock"],
   })
 
-  test("emits image, select, button, dither select, text, and sensor entities", () => {
+  test("emits the full entity set for a mono panel (no colour-mode select)", () => {
     const components = messages.map(
       (message) => message.topic.split("/")[1],
     )
     expect(components).toEqual([
       "image",
-      "select",
-      "button",
-      "select",
-      "text",
-      "sensor",
+      "select", // view
+      "button", // refresh
+      "select", // Display: Dither
+      "number", // Display: Brightness
+      "number", // Display: Saturation
+      "text", // Photo Frame: People
+      "text", // Photo Frame: Query
+      "button", // Photo Frame: Next photo
+      "button", // Photo Frame: Previous photo
+      "sensor", // last render
     ])
+  })
+
+  test("adds the colour-mode select on a colour panel only", () => {
+    const colourMessages = buildDiscoveryMessages({
+      device: IMPRESSION_DEVICE,
+      viewNames: ["Clock"],
+    })
+
+    const colourModeMessage = colourMessages.find(
+      (message) => message.topic.includes("_colour_mode/"),
+    )
+    expect(colourModeMessage?.payload.options).toEqual([
+      "Color",
+      "Black & White",
+    ])
+    expect(
+      messages.some((message) =>
+        message.topic.includes("_colour_mode/"),
+      ),
+    ).toBe(false)
   })
 
   test("every message is retained with a device-scoped unique_id", () => {
