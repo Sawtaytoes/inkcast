@@ -1,10 +1,9 @@
 # Inkcast render/push server.
 #
 # The server renders with headless Chromium (Playwright), so the image bundles a
-# Chromium build. It runs the TypeScript entrypoint directly via `tsx` — the
-# render engine loads font assets by path, which a bundler would relocate, so
-# running source is the simplest correct option. Slimming this to a bundled
-# runtime is a future optimization.
+# Chromium build. Runtime is the esbuild bundle run with plain `node` (never tsx
+# in prod — locked decision); `yarn build` also copies the font TTFs next to the
+# bundle, where the render engine resolves them by path.
 
 FROM node:24-slim AS base
 WORKDIR /app
@@ -29,8 +28,9 @@ RUN yarn install --immutable
 # Chromium + its system libraries for the render engine.
 RUN yarn playwright install --with-deps chromium
 
-# --- Source ---
+# --- Source + bundle ---
 COPY . .
+RUN yarn build
 
 # HTTP API port (override with PORT).
 EXPOSE 8788
