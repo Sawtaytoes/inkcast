@@ -78,7 +78,7 @@ export const listPeople = async (
 ): Promise<ImmichPerson[]> => {
   const result = await requestJson({
     config,
-    path: "/api/people?withHidden=false",
+    path: "/api/people?withHidden=false&size=1000",
   })
   const people: { id: string; name: string }[] =
     result.people ?? result ?? []
@@ -90,9 +90,47 @@ export const listPeople = async (
     }))
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /**
- * Resolve a comma-separated config string of person NAMES (or raw UUIDs) to
- * person ids. Unknown names are reported, not silently dropped.
+ * Match one config entry against the people list: raw UUID, exact full name
+ * (case-insensitive), or — the friendly path — a UNIQUE first name
+ * ("Xander" → "Xander Ghadyani"). Ambiguous or missing = undefined.
+ */
+const matchPersonId = ({
+  entry,
+  people,
+}: {
+  entry: string
+  people: readonly ImmichPerson[]
+}) => {
+  if (UUID_PATTERN.test(entry)) {
+    return entry
+  }
+
+  const lowerEntry = entry.toLowerCase()
+  const exactMatch = people.find(
+    (person) => person.name.toLowerCase() === lowerEntry,
+  )
+  if (exactMatch) {
+    return exactMatch.id
+  }
+
+  const firstNameMatches = people.filter(
+    (person) =>
+      person.name.split(" ")[0].toLowerCase() ===
+      lowerEntry,
+  )
+  return firstNameMatches.length === 1
+    ? firstNameMatches[0].id
+    : undefined
+}
+
+/**
+ * Resolve a comma-separated config string of person NAMES (full, or unique
+ * first names, or raw UUIDs) to person ids. Unknown/ambiguous names are
+ * reported, not silently dropped.
  */
 export const resolvePersonIds = async ({
   config,
@@ -112,30 +150,20 @@ export const resolvePersonIds = async ({
     return { personIds: [], unknownNames: [] }
   }
 
-  const uuidPattern =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   const people = await listPeople(config)
-  const idByLowerName = new Map(
-    people.map((person) => [
-      person.name.toLowerCase(),
-      person.id,
-    ]),
-  )
+  const resolved = entries.map((entry) => ({
+    entry,
+    personId: matchPersonId({ entry, people }),
+  }))
 
-  const personIds = entries
-    .map((entry) =>
-      uuidPattern.test(entry)
-        ? entry
-        : idByLowerName.get(entry.toLowerCase()),
-    )
-    .filter((id): id is string => Boolean(id))
-  const unknownNames = entries.filter(
-    (entry) =>
-      !uuidPattern.test(entry) &&
-      !idByLowerName.has(entry.toLowerCase()),
-  )
-
-  return { personIds, unknownNames }
+  return {
+    personIds: resolved
+      .map(({ personId }) => personId)
+      .filter((id): id is string => Boolean(id)),
+    unknownNames: resolved
+      .filter(({ personId }) => !personId)
+      .map(({ entry }) => entry),
+  }
 }
 
 const fetchPersonAssetIds = async ({
