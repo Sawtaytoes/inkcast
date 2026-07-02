@@ -48,7 +48,7 @@ describe("buildDiscoveryMessages", () => {
     viewNames: ["Now Playing (Dashboard)", "Clock"],
   })
 
-  test("emits image, select, button, text, and sensor entities", () => {
+  test("emits image, select, button, dither select, text, and sensor entities", () => {
     const components = messages.map(
       (message) => message.topic.split("/")[1],
     )
@@ -56,6 +56,7 @@ describe("buildDiscoveryMessages", () => {
       "image",
       "select",
       "button",
+      "select",
       "text",
       "sensor",
     ])

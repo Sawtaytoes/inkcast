@@ -1,6 +1,10 @@
 import { resolve } from "node:path"
 import { serve } from "@hono/node-server"
 import {
+  DITHER_ALGORITHMS,
+  type DitherAlgorithm,
+} from "@inkcast/core/devices/device"
+import {
   createNowPlayingAdapter,
   FOLLOWED_NOW_PLAYING_KEY,
 } from "./adapters/nowPlayingAdapter.ts"
@@ -55,6 +59,11 @@ const loadEnvironmentFile = () => {
   })
 }
 
+const getIsDitherAlgorithm = (
+  value: string,
+): value is DitherAlgorithm =>
+  (DITHER_ALGORITHMS as readonly string[]).includes(value)
+
 const main = async () => {
   loadEnvironmentFile()
 
@@ -76,6 +85,7 @@ const main = async () => {
   const pushController = createPushController({
     devices: config.devices,
     deviceStore,
+    deviceConfigStore,
     viewDataStore,
     renderService,
     publisher,
@@ -219,6 +229,8 @@ const main = async () => {
           | "view"
           | "photoPeople"
           | "photoPeopleRestore"
+          | "dither"
+          | "ditherRestore"
       }
     >()
     config.devices.forEach((device) => {
@@ -241,6 +253,14 @@ const main = async () => {
       commandRoutes.set(topics.photoPeopleState, {
         deviceId: device.id,
         kind: "photoPeopleRestore",
+      })
+      commandRoutes.set(topics.ditherCommand, {
+        deviceId: device.id,
+        kind: "dither",
+      })
+      commandRoutes.set(topics.ditherState, {
+        deviceId: device.id,
+        kind: "ditherRestore",
       })
     })
 
@@ -292,6 +312,38 @@ const main = async () => {
               peopleText: payload,
             })
           }
+        } else if (route.kind === "dither") {
+          const device = pushController.deviceById.get(
+            route.deviceId,
+          )
+          if (!device || !getIsDitherAlgorithm(payload)) {
+            return
+          }
+          deviceConfigStore.setDitherAlgorithm({
+            deviceId: route.deviceId,
+            algorithm: payload,
+          })
+          await publisher.publish({
+            topic: buildDeviceTopics({
+              baseTopic,
+              device,
+            }).ditherState,
+            payload,
+            isRetained: true,
+          })
+          await pushController.pushDevice(route.deviceId)
+        } else if (route.kind === "ditherRestore") {
+          if (
+            !deviceConfigStore.getDitherAlgorithm(
+              route.deviceId,
+            ) &&
+            getIsDitherAlgorithm(payload)
+          ) {
+            deviceConfigStore.setDitherAlgorithm({
+              deviceId: route.deviceId,
+              algorithm: payload,
+            })
+          }
         } else if (getIsViewName(payload)) {
           await pushController.setView({
             deviceId: route.deviceId,
@@ -307,6 +359,31 @@ const main = async () => {
         pushController.pushDevice(device.id),
       ),
     )
+
+    // Seed the Dither select with the registry default for devices with no
+    // retained override yet (the retained restore, if any, lands within the
+    // first seconds of the subscription — hence the delay).
+    setTimeout(() => {
+      config.devices
+        .filter(
+          (device) =>
+            !deviceConfigStore.getDitherAlgorithm(
+              device.id,
+            ),
+        )
+        .forEach((device) => {
+          publisher
+            .publish({
+              topic: buildDeviceTopics({
+                baseTopic,
+                device,
+              }).ditherState,
+              payload: device.ditherProfile.algorithm,
+              isRetained: true,
+            })
+            .catch(() => {})
+        })
+    }, 5_000)
   }
 
   const app = createApp({

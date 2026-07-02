@@ -3,6 +3,7 @@ import type { ConfiguredDevice } from "./config/env.ts"
 import { buildDeviceTopics } from "./homeAssistant/discovery.ts"
 import type { MqttPublisher } from "./mqtt/publisher.ts"
 import type { RenderService } from "./render/renderService.ts"
+import type { DeviceConfigStore } from "./state/deviceConfigStore.ts"
 import type { DeviceStore } from "./state/deviceStore.ts"
 import type { ViewDataStore } from "./state/viewDataStore.ts"
 import type { ViewName } from "./views/registry.ts"
@@ -27,6 +28,7 @@ export type PushController = {
 export const createPushController = ({
   devices,
   deviceStore,
+  deviceConfigStore,
   viewDataStore,
   renderService,
   publisher,
@@ -34,6 +36,7 @@ export const createPushController = ({
 }: {
   devices: readonly ConfiguredDevice[]
   deviceStore: DeviceStore
+  deviceConfigStore: DeviceConfigStore
   viewDataStore: ViewDataStore
   renderService: RenderService
   publisher: MqttPublisher
@@ -49,8 +52,20 @@ export const createPushController = ({
       return null
     }
 
+    // HA-selected dither algorithm overrides the registry default.
+    const ditherOverride =
+      deviceConfigStore.getDitherAlgorithm(deviceId)
+
     return renderService.renderDevice({
-      device,
+      device: ditherOverride
+        ? {
+            ...device,
+            ditherProfile: {
+              ...device.ditherProfile,
+              algorithm: ditherOverride,
+            },
+          }
+        : device,
       viewName: deviceStore.getActiveView(deviceId),
       // Unpinned devices follow the household's active player.
       nowPlaying: viewDataStore.getNowPlaying(

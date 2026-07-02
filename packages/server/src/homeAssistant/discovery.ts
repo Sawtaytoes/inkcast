@@ -1,4 +1,7 @@
-import type { DeviceMetadata } from "@inkcast/core/devices/device"
+import {
+  type DeviceMetadata,
+  DITHER_ALGORITHMS,
+} from "@inkcast/core/devices/device"
 
 /**
  * Home Assistant MQTT-discovery payloads for an Inkcast device.
@@ -57,6 +60,8 @@ export const buildDeviceTopics = ({
     lastRender: `${base}/last_render`,
     photoPeopleCommand: `${base}/photo_people/set`,
     photoPeopleState: `${base}/photo_people`,
+    ditherCommand: `${base}/dither/set`,
+    ditherState: `${base}/dither`,
   }
 }
 
@@ -140,6 +145,22 @@ export const buildDiscoveryMessages = ({
         unique_id: `inkcast_${device.id}_refresh`,
         command_topic: topics.refreshCommand,
         payload_press: "refresh",
+        device: deviceBlock,
+      },
+    },
+    {
+      // A config-category select: which dithering algorithm this panel
+      // uses (overrides the registry default; retained = persisted).
+      topic: discoveryTopic("select", "dither"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Dither",
+        unique_id: `inkcast_${device.id}_dither`,
+        options: Array.from(DITHER_ALGORITHMS),
+        command_topic: topics.ditherCommand,
+        state_topic: topics.ditherState,
+        entity_category: "config",
         device: deviceBlock,
       },
     },

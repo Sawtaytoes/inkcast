@@ -76,16 +76,15 @@ const formatCompactTime = (now: Date) =>
     .replace(" AM", "a")
     .replace(" PM", "p")
 
-/** `07-01W` — numeric date plus the weekday initial. */
+/** `Tu-02` — two-letter weekday plus the day (month is obvious in person). */
 const formatCompactDate = (now: Date) => {
-  const month = String(now.getMonth() + 1).padStart(2, "0")
   const day = String(now.getDate()).padStart(2, "0")
-  const weekdayInitial = new Intl.DateTimeFormat("en-US", {
+  const weekday = new Intl.DateTimeFormat("en-US", {
     weekday: "short",
   })
     .format(now)
-    .slice(0, 1)
-  return `${month}-${day}${weekdayInitial}`
+    .slice(0, 2)
+  return `${weekday}-${day}`
 }
 
 /** Small panels get the compact date/time formats. */
