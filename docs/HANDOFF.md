@@ -152,6 +152,24 @@ add-on config) aren't present/valid in HA's **`/ssl`** folder. To enable:
    broker presents them.
 Meanwhile plain `mqtt://homeassistant.octen:1883` works fine on the LAN.
 
+## Requested follow-ups (2026-07-01)
+
+- **Immich photo-frame view + data source (NOT built).** Views currently render
+  STATIC sample data (e.g. the now-playing card is hardcoded). The Impression's
+  Immich photo frame from the home-displays repo
+  (`eink-clients/immich_impression_frame.py`: person-filtered album, face-aware
+  800×480 crop, E6 dither) is NOT yet ported into Inkcast. Port it as an Inkcast
+  view + data adapter. **Search criteria (kids' Immich `personIds`, album, Immich
+  URL+token) must be config, not code** — via env / the gitignored devices/config
+  file, and ideally editable from a **web config UI** (Inkcast doesn't have a
+  settings UI yet — only env/config-file today; a config/editor UI is a desirable
+  addition and fits the "see + test views" editor goal).
+- **Use hostnames, not IPs, for the Pis.** The Pis' IPs are dynamic. Deploy /
+  reference them by hostname (`inky-phat`, `inky-spectra`) — via `.local` mDNS or
+  the `.octen` DNS domain — in the device-client docs and any deploy scripts.
+  (The broker is already referenced by DNS: `homeassistant.octen`.) Verify which
+  form resolves on the LAN and standardise on it.
+
 ## Git state
 
 12+ commits on `master`, pushed to GitHub. Clean tree. mux-magic has an unpushed
