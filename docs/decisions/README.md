@@ -7,6 +7,7 @@ proposing a change; a settled decision here overrides default instinct.
 
 | Date | Decision | Status |
 | --- | --- | --- |
+| 2026-07-01 | [Now-playing data comes from HA `media_player`, not Music Assistant](2026-07-01-now-playing-reads-ha-media-player.md) | Accepted |
 | 2026-07-01 | [Production runs an esbuild bundle with node, never tsx](2026-07-01-esbuild-bundle-not-tsx-in-prod.md) | Accepted |
 | 2026-07-01 | [Inkcast is a public open-source app, not a private repo](2026-07-01-public-oss-app-on-github.md) | Accepted |
 | 2026-07-01 | [Develop on a local disk with the node-modules linker (not a network share)](2026-07-01-local-drive-not-network-share.md) | Accepted |
