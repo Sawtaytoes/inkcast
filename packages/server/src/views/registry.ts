@@ -2,12 +2,14 @@ import type { DeviceMetadata } from "@inkcast/core/devices/device"
 import { ClockView } from "@inkcast/views/ClockView"
 import { NowPlayingCard } from "@inkcast/views/NowPlayingCard"
 import { createElement, type ReactElement } from "react"
+import { IDLE_NOW_PLAYING } from "../adapters/nowPlayingAdapter.ts"
+import type { NowPlayingData } from "../state/viewDataStore.ts"
 
 /**
- * The views a device can show, and how to turn a view name + device into a
- * React element to render. This is the seam Phase 2 plugs real data adapters
- * into (HA media player, Immich, weather); for now the now-playing view uses
- * placeholder data and the clock uses the server clock.
+ * The views a device can show, and how to turn a view name + device + view
+ * data into a React element to render. Now-playing data comes from the HA
+ * media_player adapter (undefined = no data yet → idle placeholder); the
+ * clock uses the server clock in the process timezone (`TZ`).
  */
 
 export const VIEW_NAMES = ["now-playing", "clock"] as const
@@ -37,10 +39,12 @@ export const renderViewElement = ({
   viewName,
   device,
   now,
+  nowPlaying,
 }: {
   viewName: ViewName
   device: DeviceMetadata
   now: Date
+  nowPlaying?: NowPlayingData
 }): ReactElement => {
   const panel = {
     width: device.width,
@@ -56,11 +60,8 @@ export const renderViewElement = ({
     })
   }
 
-  // Placeholder until the Phase-2 HA data adapter feeds real now-playing data.
   return createElement(NowPlayingCard, {
     ...panel,
-    artist: "—",
-    title: "Nothing playing",
-    isPlaying: false,
+    ...(nowPlaying ?? IDLE_NOW_PLAYING),
   })
 }

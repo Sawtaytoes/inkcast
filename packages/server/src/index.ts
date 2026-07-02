@@ -1,4 +1,5 @@
 import { serve } from "@hono/node-server"
+import { createNowPlayingAdapter } from "./adapters/nowPlayingAdapter.ts"
 import { createApp } from "./app.ts"
 import { loadConfig } from "./config/env.ts"
 import {
@@ -9,7 +10,9 @@ import {
 import { createMqttPublisher } from "./mqtt/publisher.ts"
 import { createPushController } from "./pushController.ts"
 import { createRenderService } from "./render/renderService.ts"
+import { startClockTicker } from "./schedulers/clockTicker.ts"
 import { createDeviceStore } from "./state/deviceStore.ts"
+import { createViewDataStore } from "./state/viewDataStore.ts"
 import {
   getIsViewName,
   VIEW_NAMES,
@@ -40,12 +43,84 @@ const main = async () => {
   const deviceStore = createDeviceStore({
     deviceIds: config.devices.map((device) => device.id),
   })
+  const viewDataStore = createViewDataStore()
   const pushController = createPushController({
     devices: config.devices,
     deviceStore,
+    viewDataStore,
     renderService,
     publisher,
     baseTopic,
+  })
+
+  /** Push every device currently showing `viewName`, without awaiting. */
+  const pushDevicesShowingView = ({
+    viewName,
+    entityId,
+  }: {
+    viewName: string
+    entityId?: string
+  }) => {
+    config.devices
+      .filter(
+        (device) =>
+          deviceStore.getActiveView(device.id) ===
+            viewName &&
+          (entityId === undefined ||
+            device.nowPlayingEntityId === entityId),
+      )
+      .forEach((device) => {
+        pushController
+          .pushDevice(device.id)
+          .catch((error) => {
+            console.error(
+              `[inkcast] push failed for ${device.id}`,
+              error,
+            )
+          })
+      })
+  }
+
+  // Phase-2 now-playing adapter: stream the watched media_player entities
+  // from HA and re-push affected devices on change. Disabled unless HA_URL +
+  // HA_TOKEN are set and at least one device is bound to an entity.
+  const watchedEntityIds = Array.from(
+    new Set(
+      config.devices
+        .map((device) => device.nowPlayingEntityId)
+        .filter(
+          (
+            candidateEntityId,
+          ): candidateEntityId is string =>
+            Boolean(candidateEntityId),
+        ),
+    ),
+  )
+  const hasNowPlayingAdapter = Boolean(
+    config.ha.url &&
+      config.ha.token &&
+      watchedEntityIds.length > 0,
+  )
+  const nowPlayingAdapter = hasNowPlayingAdapter
+    ? createNowPlayingAdapter({
+        haUrl: config.ha.url,
+        haToken: config.ha.token,
+        entityIds: watchedEntityIds,
+        viewDataStore,
+        onNowPlayingChanged: (entityId) => {
+          pushDevicesShowingView({
+            viewName: "now-playing",
+            entityId,
+          })
+        },
+      })
+    : null
+
+  // Keep clock panels on real time: re-push them each minute.
+  const clockTicker = startClockTicker({
+    onMinuteTick: () => {
+      pushDevicesShowingView({ viewName: "clock" })
+    },
   })
 
   if (publisher.isEnabled) {
@@ -126,12 +201,14 @@ const main = async () => {
     port: config.port,
   })
   console.log(
-    `[inkcast] serving on :${config.port} (engine=${config.renderEngine}, mqtt=${publisher.isEnabled ? "on" : "off"}, devices=${config.devices.length})`,
+    `[inkcast] serving on :${config.port} (engine=${config.renderEngine}, mqtt=${publisher.isEnabled ? "on" : "off"}, ha=${hasNowPlayingAdapter ? "on" : "off"}, devices=${config.devices.length})`,
   )
 
   const shutdown = async () => {
     console.log("[inkcast] shutting down")
     server.close()
+    clockTicker.close()
+    nowPlayingAdapter?.close()
     await publisher.close()
     await renderService.close()
     process.exit(0)

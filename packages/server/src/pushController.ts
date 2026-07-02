@@ -1,18 +1,20 @@
-import type { DeviceMetadata } from "@inkcast/core/devices/device"
+import type { ConfiguredDevice } from "./config/env.ts"
 import { buildDeviceTopics } from "./ha/discovery.ts"
 import type { MqttPublisher } from "./mqtt/publisher.ts"
 import type { RenderService } from "./render/renderService.ts"
 import type { DeviceStore } from "./state/deviceStore.ts"
+import type { ViewDataStore } from "./state/viewDataStore.ts"
 import type { ViewName } from "./views/registry.ts"
 
 /**
  * The single place that renders a device's current view and pushes it to MQTT
- * (image + view-state + last-render timestamp). Shared by the HTTP API and the
- * MQTT command handler so both paths behave identically. When MQTT is disabled
- * the publish calls no-op, so `renderDeviceImage` (the HTTP GET) still works.
+ * (image + view-state + last-render timestamp). Shared by the HTTP API, the
+ * MQTT command handler, and the data adapters so every path behaves
+ * identically. When MQTT is disabled the publish calls no-op, so
+ * `renderDevice` (the HTTP GET) still works.
  */
 export type PushController = {
-  deviceById: Map<string, DeviceMetadata>
+  deviceById: Map<string, ConfiguredDevice>
   renderDevice: (deviceId: string) => Promise<Buffer | null>
   pushDevice: (deviceId: string) => Promise<boolean>
   setView: (params: {
@@ -24,12 +26,14 @@ export type PushController = {
 export const createPushController = ({
   devices,
   deviceStore,
+  viewDataStore,
   renderService,
   publisher,
   baseTopic,
 }: {
-  devices: readonly DeviceMetadata[]
+  devices: readonly ConfiguredDevice[]
   deviceStore: DeviceStore
+  viewDataStore: ViewDataStore
   renderService: RenderService
   publisher: MqttPublisher
   baseTopic: string
@@ -47,19 +51,21 @@ export const createPushController = ({
     return renderService.renderDevice({
       device,
       viewName: deviceStore.getActiveView(deviceId),
+      nowPlaying: device.nowPlayingEntityId
+        ? viewDataStore.getNowPlaying(
+            device.nowPlayingEntityId,
+          )
+        : undefined,
     })
   }
 
   const pushDevice = async (deviceId: string) => {
     const device = deviceById.get(deviceId)
-    if (!device) {
+    const image = await renderDevice(deviceId)
+    if (!device || !image) {
       return false
     }
 
-    const image = await renderService.renderDevice({
-      device,
-      viewName: deviceStore.getActiveView(deviceId),
-    })
     const topics = buildDeviceTopics({ baseTopic, device })
 
     await publisher.publish({

@@ -42,6 +42,9 @@ const EnvSchema = z.object({
   ),
   MQTT_NODE_ID: z._default(z.string(), "inkcast"),
   MQTT_BASE_TOPIC: z._default(z.string(), "inkcast"),
+  HA_URL: z._default(z.string(), ""),
+  HA_TOKEN: z._default(z.string(), ""),
+  HA_NOW_PLAYING_ENTITY: z._default(z.string(), ""),
 })
 
 /**
@@ -71,7 +74,17 @@ const DeviceConfigSchema = z.object({
     }),
     { algorithm: "floyd-steinberg", supersampleFactor: 2 },
   ),
+  nowPlayingEntityId: z.optional(z.string()),
 })
+
+/**
+ * A device as the server runs it: the core render metadata plus the server's
+ * per-device data-source wiring (which HA `media_player` feeds its
+ * now-playing view).
+ */
+export type ConfiguredDevice = DeviceMetadata & {
+  nowPlayingEntityId?: string
+}
 
 const expandDevice = (
   deviceConfig: z.infer<typeof DeviceConfigSchema>,
@@ -84,7 +97,9 @@ const expandDevice = (
 })
 
 /** Load the real devices from the config file, or fall back to the examples. */
-const loadDevices = (devicesFile: string | undefined) => {
+const loadDevices = (
+  devicesFile: string | undefined,
+): readonly ConfiguredDevice[] => {
   if (!devicesFile) {
     return SEED_DEVICES
   }
@@ -107,12 +122,18 @@ export type MqttConfig = {
   baseTopic: string
 }
 
+export type HaConfig = {
+  url: string
+  token: string
+}
+
 export type InkcastConfig = {
   port: number
   apiToken: string
   renderEngine: "chromium" | "satori"
-  devices: readonly DeviceMetadata[]
+  devices: readonly ConfiguredDevice[]
   mqtt: MqttConfig
+  ha: HaConfig
 }
 
 /** Parse + validate configuration from `process.env`. Throws on bad input. */
@@ -120,12 +141,21 @@ export const loadConfig = (
   environment: NodeJS.ProcessEnv = process.env,
 ): InkcastConfig => {
   const parsed = EnvSchema.parse(environment)
+  const devices = loadDevices(
+    parsed.INKCAST_DEVICES_FILE,
+  ).map((device) => ({
+    ...device,
+    nowPlayingEntityId:
+      device.nowPlayingEntityId ||
+      parsed.HA_NOW_PLAYING_ENTITY ||
+      undefined,
+  }))
 
   return {
     port: parsed.PORT,
     apiToken: parsed.INKCAST_API_TOKEN,
     renderEngine: parsed.INKCAST_RENDER_ENGINE,
-    devices: loadDevices(parsed.INKCAST_DEVICES_FILE),
+    devices,
     mqtt: {
       url: parsed.MQTT_URL,
       username: parsed.MQTT_USERNAME,
@@ -136,6 +166,10 @@ export const loadConfig = (
       discoveryPrefix: parsed.MQTT_DISCOVERY_PREFIX,
       nodeId: parsed.MQTT_NODE_ID,
       baseTopic: parsed.MQTT_BASE_TOPIC,
+    },
+    ha: {
+      url: parsed.HA_URL,
+      token: parsed.HA_TOKEN,
     },
   }
 }
