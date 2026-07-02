@@ -2,7 +2,11 @@ import type { DeviceMetadata } from "@inkcast/core/devices/device"
 import type { DitherAdjustments } from "@inkcast/core/pipeline/dither"
 import { createChromiumEngine } from "@inkcast/render/chromiumEngine"
 import type { RenderEngine } from "@inkcast/render/engine"
-import { renderDeviceImage } from "@inkcast/render/renderDeviceImage"
+import type { SafeAreaInset } from "@inkcast/render/renderDeviceImage"
+import {
+  renderDeviceImage,
+  resolveSafeArea,
+} from "@inkcast/render/renderDeviceImage"
 import { createSatoriEngine } from "@inkcast/render/satoriEngine"
 import type {
   NowPlayingData,
@@ -27,6 +31,7 @@ export type RenderService = {
     photoFrame?: PhotoFrameData
     weather?: WeatherData
     adjustments?: DitherAdjustments
+    safeAreaInset?: SafeAreaInset
   }) => Promise<Buffer>
   close: () => Promise<void>
 }
@@ -52,12 +57,28 @@ export const createRenderService = async ({
       photoFrame,
       weather,
       adjustments,
-    }) =>
-      renderDeviceImage({
+      safeAreaInset,
+    }) => {
+      // The view must be laid out in the safe box (device minus the mat
+      // inset), not the full panel, so its text reflows to what stays
+      // visible. renderDeviceImage places that render onto the full panel.
+      const { contentWidth, contentHeight } =
+        resolveSafeArea({
+          width: device.width,
+          height: device.height,
+          safeAreaInset,
+        })
+      const contentDevice: DeviceMetadata = {
+        ...device,
+        width: contentWidth,
+        height: contentHeight,
+      }
+
+      return renderDeviceImage({
         engine,
         element: renderViewElement({
           viewName,
-          device,
+          device: contentDevice,
           now: new Date(),
           nowPlaying,
           photoFrame,
@@ -65,7 +86,9 @@ export const createRenderService = async ({
         }),
         device,
         adjustments,
-      }),
+        safeAreaInset,
+      })
+    },
     close: async () => {
       await engine.close?.()
     },

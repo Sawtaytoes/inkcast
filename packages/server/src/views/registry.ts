@@ -55,6 +55,14 @@ export const getIsViewName = (
 export const getIsNowPlayingView = (viewName: ViewName) =>
   NOW_PLAYING_VIEW_NAMES.has(viewName)
 
+/**
+ * Views that should bleed to the panel edge (ignoring the safe-area crop
+ * inset). Photos look right filling the whole panel even under a mat; text
+ * must stay inside the visible window. Photo Frame is the only bleed view.
+ */
+export const getIsBleedView = (viewName: ViewName) =>
+  viewName === "Photo Frame"
+
 export const getIsClockBearingView = (viewName: ViewName) =>
   CLOCK_BEARING_VIEW_NAMES.has(viewName)
 

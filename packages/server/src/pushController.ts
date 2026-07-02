@@ -7,7 +7,10 @@ import type { RenderService } from "./render/renderService.ts"
 import type { DeviceConfigStore } from "./state/deviceConfigStore.ts"
 import type { DeviceStore } from "./state/deviceStore.ts"
 import type { ViewDataStore } from "./state/viewDataStore.ts"
-import type { ViewName } from "./views/registry.ts"
+import {
+  getIsBleedView,
+  type ViewName,
+} from "./views/registry.ts"
 
 /**
  * The single place that renders a device's current view and pushes it to MQTT
@@ -93,9 +96,36 @@ export const createPushController = ({
       (saturationPercent !== undefined &&
         saturationPercent !== 100)
 
+    // Text views honour the mat's safe-area crop; photos bleed to the edge.
+    const activeView = deviceStore.getActiveView(deviceId)
+    const safeAreaInset = getIsBleedView(activeView)
+      ? undefined
+      : {
+          top:
+            deviceConfigStore.getCropInset({
+              deviceId,
+              edge: "top",
+            }) ?? 0,
+          right:
+            deviceConfigStore.getCropInset({
+              deviceId,
+              edge: "right",
+            }) ?? 0,
+          bottom:
+            deviceConfigStore.getCropInset({
+              deviceId,
+              edge: "bottom",
+            }) ?? 0,
+          left:
+            deviceConfigStore.getCropInset({
+              deviceId,
+              edge: "left",
+            }) ?? 0,
+        }
+
     return renderService.renderDevice({
       device: effectiveDevice,
-      viewName: deviceStore.getActiveView(deviceId),
+      viewName: activeView,
       // Unpinned devices follow the household's active player.
       nowPlaying: viewDataStore.getNowPlaying(
         getNowPlayingKey(device),
@@ -110,6 +140,7 @@ export const createPushController = ({
             },
           }
         : {}),
+      ...(safeAreaInset ? { safeAreaInset } : {}),
     })
   }
 

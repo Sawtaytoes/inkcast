@@ -8,6 +8,21 @@ import type { DitherAlgorithm } from "@inkcast/core/devices/device"
 export type ColourModeOverride = "color" | "bw"
 
 /**
+ * The four edges of a device's safe-area crop inset, in native panel pixels.
+ * A physical mat/frame overlaps the panel edges and hides content under it, so
+ * text views render inside these insets (white margin); photo views ignore
+ * them and bleed to the edge. Tunable live per device from Home Assistant.
+ */
+export type CropEdge = "top" | "right" | "bottom" | "left"
+
+export const CROP_EDGES: readonly CropEdge[] = [
+  "top",
+  "right",
+  "bottom",
+  "left",
+]
+
+/**
  * In-memory per-device USER configuration, edited from Home Assistant via the
  * MQTT config entities (Photo Frame people/query, the Display selects and
  * sliders). Persistence is the retained MQTT state topic itself: the server
@@ -57,6 +72,16 @@ export type DeviceConfigStore = {
     deviceId: string
     percent: number
   }) => void
+  /** Safe-area crop inset for one edge, in native px (undefined = not set). */
+  getCropInset: (params: {
+    deviceId: string
+    edge: CropEdge
+  }) => number | undefined
+  setCropInset: (params: {
+    deviceId: string
+    edge: CropEdge
+    pixels: number
+  }) => void
 }
 
 export const createDeviceConfigStore =
@@ -73,6 +98,8 @@ export const createDeviceConfigStore =
     >()
     const brightnessByDeviceId = new Map<string, number>()
     const saturationByDeviceId = new Map<string, number>()
+    // Keyed by `${deviceId}:${edge}`.
+    const cropInsetByDeviceEdge = new Map<string, number>()
 
     return {
       getPhotoPeople: (deviceId) =>
@@ -104,6 +131,14 @@ export const createDeviceConfigStore =
         saturationByDeviceId.get(deviceId),
       setSaturationPercent: ({ deviceId, percent }) => {
         saturationByDeviceId.set(deviceId, percent)
+      },
+      getCropInset: ({ deviceId, edge }) =>
+        cropInsetByDeviceEdge.get(`${deviceId}:${edge}`),
+      setCropInset: ({ deviceId, edge, pixels }) => {
+        cropInsetByDeviceEdge.set(
+          `${deviceId}:${edge}`,
+          pixels,
+        )
       },
     }
   }

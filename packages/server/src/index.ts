@@ -25,7 +25,11 @@ import { createMqttPublisher } from "./mqtt/publisher.ts"
 import { createPushController } from "./pushController.ts"
 import { createRenderService } from "./render/renderService.ts"
 import { startClockTicker } from "./schedulers/clockTicker.ts"
-import { createDeviceConfigStore } from "./state/deviceConfigStore.ts"
+import {
+  CROP_EDGES,
+  type CropEdge,
+  createDeviceConfigStore,
+} from "./state/deviceConfigStore.ts"
 import { createDeviceStore } from "./state/deviceStore.ts"
 import { createGlobalConfigStore } from "./state/globalConfigStore.ts"
 import { createViewDataStore } from "./state/viewDataStore.ts"
@@ -78,6 +82,18 @@ const parsePercentPayload = (payload: string) => {
   }
   return Math.min(200, Math.max(50, Math.round(value)))
 }
+
+/** Parse + clamp a crop-inset HA number-entity payload ("0".."200" px). */
+const parsePixelPayload = (payload: string) => {
+  const value = Number.parseFloat(payload)
+  if (Number.isNaN(value)) {
+    return null
+  }
+  return Math.min(200, Math.max(0, Math.round(value)))
+}
+
+/** The config-knob kind key for a crop edge (matches the MQTT topic slug). */
+const getCropKnobKind = (edge: CropEdge) => `crop_${edge}`
 
 /**
  * One HA-editable config knob: how its MQTT payload is validated/normalized
@@ -440,6 +456,33 @@ const main = async () => {
             },
           },
         ],
+        // One crop-inset knob per edge — the mat safe area, tuned live per
+        // device (a reframed / unmatted unit can differ).
+        ...CROP_EDGES.map((edge): [string, ConfigKnob] => [
+          getCropKnobKind(edge),
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              const pixels = parsePixelPayload(payload)
+              if (pixels === null) {
+                return null
+              }
+              deviceConfigStore.setCropInset({
+                deviceId,
+                edge,
+                pixels,
+              })
+              return String(pixels)
+            },
+            getHasValue: (deviceId) =>
+              deviceConfigStore.getCropInset({
+                deviceId,
+                edge,
+              }) !== undefined,
+            onApplied: async (deviceId) => {
+              await pushController.pushDevice(deviceId)
+            },
+          },
+        ]),
       ])
 
     /** Knob kind → its command/state topics for one device. */
@@ -481,6 +524,22 @@ const main = async () => {
         saturation: {
           command: topics.saturationCommand,
           state: topics.saturationState,
+        },
+        crop_top: {
+          command: topics.cropTopCommand,
+          state: topics.cropTopState,
+        },
+        crop_right: {
+          command: topics.cropRightCommand,
+          state: topics.cropRightState,
+        },
+        crop_bottom: {
+          command: topics.cropBottomCommand,
+          state: topics.cropBottomState,
+        },
+        crop_left: {
+          command: topics.cropLeftCommand,
+          state: topics.cropLeftState,
         },
       }
       return byKind[kind]
@@ -737,6 +796,15 @@ const main = async () => {
               ) !== undefined,
             payload: "100",
           },
+          ...CROP_EDGES.map((edge) => ({
+            kind: getCropKnobKind(edge),
+            hasValue:
+              deviceConfigStore.getCropInset({
+                deviceId: device.id,
+                edge,
+              }) !== undefined,
+            payload: "0",
+          })),
         ]
         seedPairs
           .filter((seedPair) => !seedPair.hasValue)

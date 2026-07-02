@@ -72,6 +72,14 @@ export const buildDeviceTopics = ({
     brightnessState: `${base}/brightness`,
     saturationCommand: `${base}/saturation/set`,
     saturationState: `${base}/saturation`,
+    cropTopCommand: `${base}/crop_top/set`,
+    cropTopState: `${base}/crop_top`,
+    cropRightCommand: `${base}/crop_right/set`,
+    cropRightState: `${base}/crop_right`,
+    cropBottomCommand: `${base}/crop_bottom/set`,
+    cropBottomState: `${base}/crop_bottom`,
+    cropLeftCommand: `${base}/crop_left/set`,
+    cropLeftState: `${base}/crop_left`,
   }
 }
 
@@ -245,6 +253,52 @@ export const buildDiscoveryMessages = ({
         device: deviceBlock,
       },
     },
+    // Safe-area crop insets (px per edge): a physical mat overlaps the panel
+    // edges, so text views render inside these; photo views bleed past them.
+    // Tunable live so a reframed unit (or a second, unmatted one) can differ.
+    ...(
+      [
+        {
+          edge: "top",
+          command: topics.cropTopCommand,
+          state: topics.cropTopState,
+        },
+        {
+          edge: "right",
+          command: topics.cropRightCommand,
+          state: topics.cropRightState,
+        },
+        {
+          edge: "bottom",
+          command: topics.cropBottomCommand,
+          state: topics.cropBottomState,
+        },
+        {
+          edge: "left",
+          command: topics.cropLeftCommand,
+          state: topics.cropLeftState,
+        },
+      ] as const
+    ).map((cropEdge) => ({
+      topic: discoveryTopic(
+        "number",
+        `crop_${cropEdge.edge}`,
+      ),
+      isRetained: true as const,
+      payload: {
+        ...availability,
+        name: `Display: Crop ${cropEdge.edge}`,
+        unique_id: `inkcast_${device.id}_crop_${cropEdge.edge}`,
+        command_topic: cropEdge.command,
+        state_topic: cropEdge.state,
+        min: 0,
+        max: 200,
+        step: 1,
+        unit_of_measurement: "px",
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    })),
     {
       // Which Immich people feed this device's Photo Frame view
       // (comma-separated names or person UUIDs). The retained state topic

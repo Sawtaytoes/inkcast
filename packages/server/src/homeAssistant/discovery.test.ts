@@ -63,6 +63,10 @@ describe("buildDiscoveryMessages", () => {
       "select", // Display: Dither
       "number", // Display: Brightness
       "number", // Display: Saturation
+      "number", // Display: Crop top
+      "number", // Display: Crop right
+      "number", // Display: Crop bottom
+      "number", // Display: Crop left
       "text", // Photo Frame: People
       "text", // Photo Frame: Query
       "button", // Photo Frame: Next photo
