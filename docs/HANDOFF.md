@@ -7,11 +7,45 @@ Everything a fresh agent needs to continue Inkcast. Written 2026-07-01. Read thi
 ## One-line status
 
 Inkcast (a self-hostable e-ink render/push platform) is **live end-to-end**: the
-server renders per-device views, dithers per panel, and pushes PNGs over MQTT;
-Home Assistant auto-created the device entities via MQTT discovery and two-way
-control works. **Not yet done:** the physical Pis still run the OLD fetchers (so
-the panels don't show Inkcast yet) — that's Phase 3 — and the server only runs on
-a dev machine, not yet deployed as a TrueNAS app.
+server renders per-device views, dithers per panel, pushes PNGs over MQTT; Home
+Assistant auto-created the device entities via MQTT discovery, two-way control
+works, and the **pHAT now runs the Inkcast receiver** (Phase 3 pHAT done — the old
+fetcher is disabled-not-deleted). **Not yet done:** views show STATIC placeholder
+data (no live data source), the Impression Pi still runs its old fetcher, and the
+server only runs on a dev machine (not yet a TrueNAS app).
+
+## ⭐ Next steps (start here — prioritized)
+
+1. **Now-playing data adapter (Phase 2).** The now-playing view is hardcoded
+   ("Twilight Force / Dawn of the Dragonstar") — it does NOT reflect real
+   playback. Build a data adapter so the server renders the actual current track
+   and re-pushes on change. **OPEN DECISION for the maintainer:** read from
+   **Music Assistant directly** (WS, like the old `ma_nowplaying_bridge.py`) OR
+   from **HA's `media_player`** (REST/WS) — which is the source of truth? Also
+   wire the clock view's real time (server-side, in the configured TZ). This
+   likely introduces the RxJS event/debounce/cancel pipeline (deferred until now).
+2. **Impression receiver (Phase 3 cont.).** Same `device-client` receiver on
+   `inky-spectra`, with `INKCAST_IMAGE_TOPIC=inkcast/inky-impression/image`. Then
+   build the **Immich photo-frame view** (port `home-displays/eink-clients/
+   immich_impression_frame.py`: person-filtered album + face-aware 800×480 crop),
+   with kids' `personIds` / Immich URL+token from **config, not code**.
+3. **Deploy the server as a TrueNAS app** (durability — panels only update while
+   the server runs; today that's a dev machine). Dockerfile exists; build → push
+   to `docker-registry.octen.dev` → TrueNAS Custom App. Use **hostnames not IPs**
+   throughout (`inky-phat`, `inky-spectra`; broker already `homeassistant.octen`).
+4. **On-panel dither A/B** + **font swap** (Atkinson Hyperlegible), and **web
+   config UI** (no settings UI yet — env/config-file only) for devices + the
+   Immich/now-playing criteria. **TLS 8883** (certs in `/ssl`) is optional.
+
+### Done since first handoff (2026-07-01, same day)
+- Phase-3 **pHAT receiver** deployed (`device-client/`, commit 9d85d56): subscribes
+  `inkcast/inky-phat/image`, draws via `inky`. Old `inky-phat-fetcher.service`
+  `disable --now` (kept for rollback: `sudo systemctl disable --now
+  inkcast-receiver && sudo systemctl enable --now inky-phat-fetcher`).
+- **Colour-inversion fix** (commit 2bf478b): the dither pipeline now emits a plain
+  **RGB** PNG, not an indexed-palette one (palette index order was
+  content-dependent → the Inky lib swapped black/white between frames). If a mono
+  panel ever inverts again, check for indexed-palette output.
 
 ## Where things live
 
