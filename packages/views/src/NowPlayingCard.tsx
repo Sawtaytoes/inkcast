@@ -1,6 +1,10 @@
 /** @jsxRuntime automatic @jsxImportSource react */
 import type { CSSProperties } from "react"
 import type { PanelViewProps } from "./viewProps.ts"
+import {
+  buildPanelRootStyle,
+  getAccentColour,
+} from "./viewStyles.ts"
 
 /**
  * The Phase-0 "spine" view: a now-playing card. Shows a NOW PLAYING / LAST
@@ -26,8 +30,10 @@ export const NowPlayingCard = ({
   isPlaying,
 }: NowPlayingCardProps) => {
   // Type everything to CSSProperties so Satori and React agree on the shape.
-  const accentColour =
-    colourMode === "e6" ? "#d90000" : "#000000"
+  const accentColour = getAccentColour({
+    colourMode,
+    e6Colour: "#d90000",
+  })
 
   const bannerFontSize = Math.round(height * 0.11)
   const artistFontSize = Math.round(height * 0.2)
@@ -35,16 +41,9 @@ export const NowPlayingCard = ({
   const padding = Math.round(height * 0.08)
 
   const rootStyle: CSSProperties = {
-    width,
-    height,
-    display: "flex",
-    flexDirection: "column",
+    ...buildPanelRootStyle({ width, height }),
     justifyContent: "space-between",
-    backgroundColor: "#ffffff",
-    color: "#000000",
     padding,
-    fontFamily: "DejaVu Sans, sans-serif",
-    boxSizing: "border-box",
   }
 
   const bannerStyle: CSSProperties = {

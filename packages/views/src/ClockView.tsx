@@ -1,6 +1,10 @@
 /** @jsxRuntime automatic @jsxImportSource react */
 import type { CSSProperties } from "react"
 import type { PanelViewProps } from "./viewProps.ts"
+import {
+  buildPanelRootStyle,
+  getAccentColour,
+} from "./viewStyles.ts"
 
 /**
  * A big-clock view: centered time with the date beneath. Time/date are passed in
@@ -20,20 +24,15 @@ export const ClockView = ({
   time,
   date,
 }: ClockViewProps) => {
-  const accentColour =
-    colourMode === "e6" ? "#1f4fd0" : "#000000"
+  const accentColour = getAccentColour({
+    colourMode,
+    e6Colour: "#1f4fd0",
+  })
 
   const rootStyle: CSSProperties = {
-    width,
-    height,
-    display: "flex",
-    flexDirection: "column",
+    ...buildPanelRootStyle({ width, height }),
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
-    color: "#000000",
-    fontFamily: "DejaVu Sans, sans-serif",
-    boxSizing: "border-box",
   }
 
   const timeStyle: CSSProperties = {
