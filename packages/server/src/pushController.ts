@@ -57,6 +57,7 @@ export const createPushController = ({
         device.nowPlayingEntityId ??
           FOLLOWED_NOW_PLAYING_KEY,
       ),
+      photoFrame: viewDataStore.getPhotoFrame(deviceId),
     })
   }
 

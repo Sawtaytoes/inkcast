@@ -14,11 +14,19 @@ export type NowPlayingData = {
   artworkDataUri?: string
 }
 
+/** The current photo-frame image for a device (already panel-sized). */
+export type PhotoFrameData = {
+  photoDataUri: string
+  assetId: string
+  fetchedAtMs: number
+}
+
 /**
- * In-memory latest-value store for view data, keyed by the upstream entity id.
- * Adapters write into it as events arrive; the render path reads from it, so a
- * view switch or manual refresh always renders the freshest known data without
- * waiting for the next upstream event.
+ * In-memory latest-value store for view data — now-playing keyed by the
+ * upstream entity id, photo-frame keyed by device id. Adapters write into it
+ * as events arrive; the render path reads from it, so a view switch or manual
+ * refresh always renders the freshest known data without waiting for the next
+ * upstream event.
  */
 export type ViewDataStore = {
   getNowPlaying: (
@@ -28,6 +36,13 @@ export type ViewDataStore = {
     entityId: string
     data: NowPlayingData
   }) => void
+  getPhotoFrame: (
+    deviceId: string,
+  ) => PhotoFrameData | undefined
+  setPhotoFrame: (params: {
+    deviceId: string
+    data: PhotoFrameData | undefined
+  }) => void
 }
 
 export const createViewDataStore = (): ViewDataStore => {
@@ -35,12 +50,25 @@ export const createViewDataStore = (): ViewDataStore => {
     string,
     NowPlayingData
   >()
+  const photoFrameByDeviceId = new Map<
+    string,
+    PhotoFrameData
+  >()
 
   return {
     getNowPlaying: (entityId) =>
       nowPlayingByEntityId.get(entityId),
     setNowPlaying: ({ entityId, data }) => {
       nowPlayingByEntityId.set(entityId, data)
+    },
+    getPhotoFrame: (deviceId) =>
+      photoFrameByDeviceId.get(deviceId),
+    setPhotoFrame: ({ deviceId, data }) => {
+      if (data === undefined) {
+        photoFrameByDeviceId.delete(deviceId)
+      } else {
+        photoFrameByDeviceId.set(deviceId, data)
+      }
     },
   }
 }

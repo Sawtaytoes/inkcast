@@ -3,9 +3,13 @@ import { ClockView } from "@inkcast/views/ClockView"
 import { NowPlayingDashboard } from "@inkcast/views/NowPlayingDashboard"
 import { NowPlayingEditorial } from "@inkcast/views/NowPlayingEditorial"
 import { NowPlayingPoster } from "@inkcast/views/NowPlayingPoster"
+import { PhotoFrameView } from "@inkcast/views/PhotoFrameView"
 import { createElement, type ReactElement } from "react"
 import { IDLE_NOW_PLAYING } from "../adapters/nowPlayingAdapter.ts"
-import type { NowPlayingData } from "../state/viewDataStore.ts"
+import type {
+  NowPlayingData,
+  PhotoFrameData,
+} from "../state/viewDataStore.ts"
 
 /**
  * The views a device can show, and how to turn a view name + device + view
@@ -20,6 +24,7 @@ export const VIEW_NAMES = [
   "Now Playing (Dashboard)",
   "Now Playing (Editorial)",
   "Now Playing (Poster)",
+  "Photo Frame",
   "Clock",
 ] as const
 export type ViewName = (typeof VIEW_NAMES)[number]
@@ -66,11 +71,13 @@ export const renderViewElement = ({
   device,
   now,
   nowPlaying,
+  photoFrame,
 }: {
   viewName: ViewName
   device: DeviceMetadata
   now: Date
   nowPlaying?: NowPlayingData
+  photoFrame?: PhotoFrameData
 }): ReactElement => {
   const panel = {
     width: device.width,
@@ -84,6 +91,12 @@ export const renderViewElement = ({
       ...panel,
       time: formatTime(now),
       date: formatDate(now),
+    })
+  }
+  if (viewName === "Photo Frame") {
+    return createElement(PhotoFrameView, {
+      ...panel,
+      photoDataUri: photoFrame?.photoDataUri,
     })
   }
   if (viewName === "Now Playing (Editorial)") {

@@ -3,7 +3,10 @@ import { createChromiumEngine } from "@inkcast/render/chromiumEngine"
 import type { RenderEngine } from "@inkcast/render/engine"
 import { renderDeviceImage } from "@inkcast/render/renderDeviceImage"
 import { createSatoriEngine } from "@inkcast/render/satoriEngine"
-import type { NowPlayingData } from "../state/viewDataStore.ts"
+import type {
+  NowPlayingData,
+  PhotoFrameData,
+} from "../state/viewDataStore.ts"
 import {
   renderViewElement,
   type ViewName,
@@ -19,6 +22,7 @@ export type RenderService = {
     device: DeviceMetadata
     viewName: ViewName
     nowPlaying?: NowPlayingData
+    photoFrame?: PhotoFrameData
   }) => Promise<Buffer>
   close: () => Promise<void>
 }
@@ -37,7 +41,12 @@ export const createRenderService = async ({
       : await createChromiumEngine()
 
   return {
-    renderDevice: ({ device, viewName, nowPlaying }) =>
+    renderDevice: ({
+      device,
+      viewName,
+      nowPlaying,
+      photoFrame,
+    }) =>
       renderDeviceImage({
         engine,
         element: renderViewElement({
@@ -45,6 +54,7 @@ export const createRenderService = async ({
           device,
           now: new Date(),
           nowPlaying,
+          photoFrame,
         }),
         device,
       }),

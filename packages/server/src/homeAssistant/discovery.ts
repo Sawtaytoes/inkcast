@@ -55,6 +55,8 @@ export const buildDeviceTopics = ({
     viewCommand: `${base}/view/set`,
     viewState: `${base}/view`,
     lastRender: `${base}/last_render`,
+    photoPeopleCommand: `${base}/photo_people/set`,
+    photoPeopleState: `${base}/photo_people`,
   }
 }
 
@@ -138,6 +140,22 @@ export const buildDiscoveryMessages = ({
         unique_id: `inkcast_${device.id}_refresh`,
         command_topic: topics.refreshCommand,
         payload_press: "refresh",
+        device: deviceBlock,
+      },
+    },
+    {
+      // A config-category text entity: which Immich people feed this
+      // device's Photo Frame view (comma-separated names or person UUIDs).
+      // The retained state topic doubles as the persistence layer.
+      topic: discoveryTopic("text", "photo_people"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Photo Frame People",
+        unique_id: `inkcast_${device.id}_photo_people`,
+        command_topic: topics.photoPeopleCommand,
+        state_topic: topics.photoPeopleState,
+        entity_category: "config",
         device: deviceBlock,
       },
     },

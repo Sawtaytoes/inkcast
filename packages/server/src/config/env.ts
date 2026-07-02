@@ -52,6 +52,9 @@ const EnvSchema = z.object({
     z.string(),
     "music_assistant,plex",
   ),
+  IMMICH_URL: z._default(z.string(), ""),
+  IMMICH_API_TOKEN: z._default(z.string(), ""),
+  INKCAST_PHOTO_MINUTES: z._default(z.coerce.number(), 10),
 })
 
 /**
@@ -136,6 +139,13 @@ export type HomeAssistantConfig = {
   followedPlatforms: readonly string[]
 }
 
+export type ImmichSettings = {
+  url: string
+  apiKey: string
+  /** Photo-frame rotation interval, minutes. */
+  intervalMinutes: number
+}
+
 export type InkcastConfig = {
   port: number
   apiToken: string
@@ -143,6 +153,7 @@ export type InkcastConfig = {
   devices: readonly ConfiguredDevice[]
   mqtt: MqttConfig
   homeAssistant: HomeAssistantConfig
+  immich: ImmichSettings
 }
 
 /** Parse + validate configuration from `process.env`. Throws on bad input. */
@@ -184,6 +195,11 @@ export const loadConfig = (
         parsed.HOME_ASSISTANT_FOLLOW_PLATFORMS.split(",")
           .map((platform) => platform.trim())
           .filter((platform) => platform.length > 0),
+    },
+    immich: {
+      url: parsed.IMMICH_URL,
+      apiKey: parsed.IMMICH_API_TOKEN,
+      intervalMinutes: parsed.INKCAST_PHOTO_MINUTES,
     },
   }
 }

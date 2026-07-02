@@ -4,6 +4,7 @@ import {
   createNowPlayingAdapter,
   FOLLOWED_NOW_PLAYING_KEY,
 } from "./adapters/nowPlayingAdapter.ts"
+import { createPhotoFrameAdapter } from "./adapters/photoFrameAdapter.ts"
 import { createApp } from "./app.ts"
 import { loadConfig } from "./config/env.ts"
 import {
@@ -15,6 +16,7 @@ import { createMqttPublisher } from "./mqtt/publisher.ts"
 import { createPushController } from "./pushController.ts"
 import { createRenderService } from "./render/renderService.ts"
 import { startClockTicker } from "./schedulers/clockTicker.ts"
+import { createDeviceConfigStore } from "./state/deviceConfigStore.ts"
 import { createDeviceStore } from "./state/deviceStore.ts"
 import { createViewDataStore } from "./state/viewDataStore.ts"
 import {
@@ -70,6 +72,7 @@ const main = async () => {
     deviceIds: config.devices.map((device) => device.id),
   })
   const viewDataStore = createViewDataStore()
+  const deviceConfigStore = createDeviceConfigStore()
   const pushController = createPushController({
     devices: config.devices,
     deviceStore,
@@ -160,6 +163,27 @@ const main = async () => {
     },
   })
 
+  // Immich photo frame: rotates a random photo of the configured people on
+  // an interval. Enabled only when Immich credentials are set.
+  const hasPhotoFrameAdapter = Boolean(
+    config.immich.url && config.immich.apiKey,
+  )
+  const photoFrameAdapter = hasPhotoFrameAdapter
+    ? createPhotoFrameAdapter({
+        immichConfig: {
+          url: config.immich.url,
+          apiKey: config.immich.apiKey,
+        },
+        intervalMinutes: config.immich.intervalMinutes,
+        devices: config.devices,
+        deviceStore,
+        deviceConfigStore,
+        viewDataStore,
+        pushDevice: (deviceId) =>
+          pushController.pushDevice(deviceId),
+      })
+    : null
+
   if (publisher.isEnabled) {
     // Advertise every device to HA (retained discovery configs).
     await Promise.all(
@@ -182,10 +206,20 @@ const main = async () => {
       ),
     )
 
-    // Map each command topic back to a device + action, then subscribe.
+    // Map each command/config topic back to a device + action, then
+    // subscribe. The retained photo-people STATE topic is also subscribed:
+    // it restores the HA-edited config after a server restart (retained MQTT
+    // is the persistence layer — no config file needed).
     const commandRoutes = new Map<
       string,
-      { deviceId: string; kind: "refresh" | "view" }
+      {
+        deviceId: string
+        kind:
+          | "refresh"
+          | "view"
+          | "photoPeople"
+          | "photoPeopleRestore"
+      }
     >()
     config.devices.forEach((device) => {
       const topics = buildDeviceTopics({
@@ -200,6 +234,14 @@ const main = async () => {
         deviceId: device.id,
         kind: "view",
       })
+      commandRoutes.set(topics.photoPeopleCommand, {
+        deviceId: device.id,
+        kind: "photoPeople",
+      })
+      commandRoutes.set(topics.photoPeopleState, {
+        deviceId: device.id,
+        kind: "photoPeopleRestore",
+      })
     })
 
     await publisher.subscribe({
@@ -211,6 +253,45 @@ const main = async () => {
         }
         if (route.kind === "refresh") {
           await pushController.pushDevice(route.deviceId)
+        } else if (route.kind === "photoPeople") {
+          const device = pushController.deviceById.get(
+            route.deviceId,
+          )
+          if (!device) {
+            return
+          }
+          deviceConfigStore.setPhotoPeople({
+            deviceId: route.deviceId,
+            peopleText: payload,
+          })
+          // Retained state = HA display + restart persistence.
+          await publisher.publish({
+            topic: buildDeviceTopics({
+              baseTopic,
+              device,
+            }).photoPeopleState,
+            payload,
+            isRetained: true,
+          })
+          // New people = new pool; fetch a fresh photo right away.
+          viewDataStore.setPhotoFrame({
+            deviceId: route.deviceId,
+            data: undefined,
+          })
+          await photoFrameAdapter?.refreshDevice(
+            route.deviceId,
+          )
+        } else if (route.kind === "photoPeopleRestore") {
+          if (
+            !deviceConfigStore.getPhotoPeople(
+              route.deviceId,
+            )
+          ) {
+            deviceConfigStore.setPhotoPeople({
+              deviceId: route.deviceId,
+              peopleText: payload,
+            })
+          }
         } else if (getIsViewName(payload)) {
           await pushController.setView({
             deviceId: route.deviceId,
@@ -246,6 +327,7 @@ const main = async () => {
     server.close()
     clockTicker.close()
     nowPlayingAdapter?.close()
+    photoFrameAdapter?.close()
     await publisher.close()
     await renderService.close()
     process.exit(0)
