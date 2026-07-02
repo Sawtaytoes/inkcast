@@ -31,7 +31,6 @@ import {
   createDeviceConfigStore,
 } from "./state/deviceConfigStore.ts"
 import { createDeviceStore } from "./state/deviceStore.ts"
-import { createGlobalConfigStore } from "./state/globalConfigStore.ts"
 import { createViewDataStore } from "./state/viewDataStore.ts"
 import {
   getIsClockBearingView,
@@ -130,7 +129,6 @@ const main = async () => {
   })
   const viewDataStore = createViewDataStore()
   const deviceConfigStore = createDeviceConfigStore()
-  const globalConfigStore = createGlobalConfigStore()
   const pushController = createPushController({
     devices: config.devices,
     deviceStore,
@@ -177,8 +175,8 @@ const main = async () => {
   // Phase-2 now-playing adapter: stream media_player entities from Home
   // Assistant and re-push affected devices on change. Devices with a pinned
   // nowPlayingEntityId watch that entity; devices without one follow the
-  // most recently active player from the followed platforms (minus the
-  // excluded ones — e.g. an all-night bedtime-music speaker). The same
+  // most recently active player from the followed platforms (which players
+  // are followed vs. ignored is an HA-automation concern). The same
   // connection streams the weather entity for the clock views. Disabled
   // unless HOME_ASSISTANT_URL + HOME_ASSISTANT_TOKEN are set.
   const pinnedEntityIds = Array.from(
@@ -207,8 +205,6 @@ const main = async () => {
         followedPlatforms: hasUnpinnedDevice
           ? config.homeAssistant.followedPlatforms
           : [],
-        getFollowExcludedEntityIds:
-          globalConfigStore.getFollowExcludedEntityIds,
         weatherEntityId:
           config.homeAssistant.weatherEntityId,
         viewDataStore,
@@ -555,8 +551,6 @@ const main = async () => {
         | "photoNext"
         | "photoPrevious"
         | "knob"
-        | "followExclude"
-        | "followExcludeRestore"
       /** Set when kind is "knob". */
       knobKind?: string
       /** True for a knob's retained-state (boot restore) topic. */
@@ -564,15 +558,6 @@ const main = async () => {
     }
 
     const commandRoutes = new Map<string, TopicRoute>()
-    const globalTopics = buildGlobalTopics(baseTopic)
-    commandRoutes.set(globalTopics.followExcludeCommand, {
-      deviceId: "",
-      kind: "followExclude",
-    })
-    commandRoutes.set(globalTopics.followExcludeState, {
-      deviceId: "",
-      kind: "followExcludeRestore",
-    })
     config.devices.forEach((device) => {
       const topics = buildDeviceTopics({
         baseTopic,
@@ -688,36 +673,6 @@ const main = async () => {
                 route.deviceId,
               )
             }
-          }
-          return
-        }
-        if (
-          route.kind === "followExclude" ||
-          route.kind === "followExcludeRestore"
-        ) {
-          const isRestore =
-            route.kind === "followExcludeRestore"
-          if (
-            isRestore &&
-            globalConfigStore.getHasFollowExcludedEntityIds()
-          ) {
-            return
-          }
-          const entityIds = payload
-            .split(",")
-            .map((entityId) => entityId.trim())
-            .filter((entityId) => entityId.length > 0)
-          globalConfigStore.setFollowExcludedEntityIds(
-            entityIds,
-          )
-          if (!isRestore) {
-            await publisher.publish({
-              topic: globalTopics.followExcludeState,
-              payload: entityIds.join(", "),
-              isRetained: true,
-            })
-            // Evict a currently-shown excluded player right away.
-            nowPlayingAdapter?.refreshExclusions()
           }
           return
         }

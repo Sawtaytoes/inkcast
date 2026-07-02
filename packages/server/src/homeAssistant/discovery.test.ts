@@ -75,23 +75,19 @@ describe("buildDiscoveryMessages", () => {
     ])
   })
 
-  test("the global device exposes the music sensor + exclusion text", () => {
+  test("the global device exposes the music sensor", () => {
     const globalMessages = buildGlobalDiscoveryMessages()
     expect(
       globalMessages.map((message) => message.topic),
     ).toEqual([
       "homeassistant/binary_sensor/inkcast/server_now_playing_active/config",
-      "homeassistant/text/inkcast/server_follow_exclude/config",
     ])
     expect(globalMessages[0].payload.state_topic).toBe(
       "inkcast/now_playing_active",
     )
-    expect(globalMessages[1].payload.command_topic).toBe(
-      "inkcast/config/follow_exclude/set",
-    )
     expect(
       (
-        globalMessages[1].payload.device as {
+        globalMessages[0].payload.device as {
           name: string
         }
       ).name,

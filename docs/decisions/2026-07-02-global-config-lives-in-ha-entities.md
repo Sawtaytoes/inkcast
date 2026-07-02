@@ -1,10 +1,10 @@
 # Server-wide settings live in HA entities (an "Inkcast Server" MQTT device), not env vars
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-07-02
 - **Type:** Architecture
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [2026-07-02-follow-exclusion-moves-to-ha-automation.md](2026-07-02-follow-exclusion-moves-to-ha-automation.md)
 
 ## Decision
 

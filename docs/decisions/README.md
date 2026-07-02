@@ -7,12 +7,13 @@ proposing a change; a settled decision here overrides default instinct.
 
 | Date | Decision | Status |
 | --- | --- | --- |
+| 2026-07-02 | [Follow-mode player exclusion is decided by the HA automation, not by Inkcast](2026-07-02-follow-exclusion-moves-to-ha-automation.md) | Accepted |
 | 2026-07-02 | [A "none" dither option hands the panel a full-colour image](2026-07-02-none-dither-panel-native.md) | Accepted |
 | 2026-07-02 | [Mat safe-area crop is a per-device MQTT/HA control, not device config](2026-07-02-safe-area-crop-via-mqtt.md) | Accepted |
 | 2026-07-02 | [Fitted text has a readable floor and condenses before it shrinks](2026-07-02-fit-text-readable-floor-and-condense.md) | Accepted |
 | 2026-07-02 | [Now-playing Dashboard uses one compact layout at every panel size](2026-07-02-now-playing-single-compact-layout.md) | Accepted |
 | 2026-07-02 | [View switching is driven by HA automations; no server-side idle fallback](2026-07-02-view-switching-via-ha-automations.md) | Accepted |
-| 2026-07-02 | [Server-wide settings live in HA entities (Inkcast Server MQTT device), not env vars](2026-07-02-global-config-lives-in-ha-entities.md) | Accepted |
+| 2026-07-02 | [Server-wide settings live in HA entities (Inkcast Server MQTT device), not env vars](2026-07-02-global-config-lives-in-ha-entities.md) | Superseded |
 | 2026-07-02 | [Now-playing views fall back to a per-device idle view when nothing plays](2026-07-02-now-playing-idle-fallback.md) | Superseded |
 | 2026-07-02 | [Photo-frame face awareness shifts the crop; it never zooms in on faces](2026-07-02-face-crop-shifts-never-zooms.md) | Accepted |
 | 2026-07-02 | [Now-playing layouts put the track title first, above the artist](2026-07-02-title-above-artist.md) | Accepted |

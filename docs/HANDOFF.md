@@ -11,8 +11,8 @@ phases is in git (`git log docs/HANDOFF.md`).
 Inkcast is **fully live on both panels**: GitHub Actions builds to GHCR,
 TrueNAS runs it, BOTH Pis (pHAT + Impression 7.3") run the `device-client/`
 receiver — the old on-device Immich fetcher is retired (unit kept for
-rollback). Now-playing follows HA players (minus excluded bedtime speakers),
-idles back to per-device ambient views, and the photo frame does
+rollback). Now-playing follows HA players (HA automations decide which
+players count), and the photo frame does
 recency-weighted, face-safe, query-able Immich photos — all knobs editable
 from the HA device page.
 
@@ -125,16 +125,13 @@ Photo Frame: Query · Sensor (Last render). The `Display:`/`Photo Frame:`
 prefixes are deliberate — HA has no config sub-groups, names are the
 grouping.
 
-Plus one server-wide "Inkcast Server" device: `Music playing` binary
+Plus one server-wide "Inkcast Server" device: the `Music playing` binary
 sensor (`binary_sensor.inkcast_server_music_playing` — THE signal for the
-view-switching automations) and `Follow: Excluded players`
-(comma-separated media_player ids; applied LIVE — an excluded player is
-evicted from the panel via a synthetic idle retraction). Topics:
-`inkcast/config/follow_exclude/set|state`. MQTT discovery has no
-entity-picker entity type (it is a plain string field in HA), so two
-HA-side scripts wrap it with native media_player multi-pickers:
-`script.inkcast_exclude_players` / `script.inkcast_reinclude_players`
-(live in HA config, not this repo; call them from automations too).
+view-switching automations). It has no editable global config. Which
+followed players drive the panels, and which to ignore (e.g. the always-on
+guest-bedroom bedtime speaker), is now an HA-automation concern — the
+server-side follow-exclusion setting was removed (see
+`docs/decisions/2026-07-02-follow-exclusion-moves-to-ha-automation.md`).
 
 ### Views (`packages/views/src/`)
 

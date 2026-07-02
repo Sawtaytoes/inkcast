@@ -87,8 +87,6 @@ export const buildDeviceTopics = ({
 export const buildGlobalTopics = (
   baseTopic = "inkcast",
 ) => ({
-  followExcludeCommand: `${baseTopic}/config/follow_exclude/set`,
-  followExcludeState: `${baseTopic}/config/follow_exclude`,
   /** Retained ON/OFF: is the followed player actually playing right now. */
   nowPlayingActiveState: `${baseTopic}/now_playing_active`,
 })
@@ -402,9 +400,10 @@ export const buildGlobalDiscoveryMessages = (
   return [
     {
       // The one signal HA automations need to drive the View selects:
-      // whether the followed player is ACTUALLY playing (exclusions already
-      // applied server-side). View switching itself is deliberately left to
-      // HA automations — no server-side idle fallback.
+      // whether the followed player is ACTUALLY playing. Which players are
+      // followed vs. ignored is decided by the HA automation, not here. View
+      // switching itself is deliberately left to HA automations — no
+      // server-side idle fallback.
       topic: `${discoveryPrefix}/binary_sensor/${nodeId}/server_now_playing_active/config`,
       isRetained: true as const,
       payload: {
@@ -414,23 +413,6 @@ export const buildGlobalDiscoveryMessages = (
         state_topic: topics.nowPlayingActiveState,
         payload_on: "ON",
         payload_off: "OFF",
-        device: serverDeviceBlock,
-      },
-    },
-    {
-      // media_player entities follow mode must IGNORE even while playing
-      // (comma-separated entity ids) — e.g. bedtime-music speakers.
-      // Applied live; no restart needed.
-      topic: `${discoveryPrefix}/text/${nodeId}/server_follow_exclude/config`,
-      isRetained: true,
-      payload: {
-        ...availability,
-        name: "Follow: Excluded players",
-        unique_id: "inkcast_server_follow_exclude",
-        command_topic: topics.followExcludeCommand,
-        state_topic: topics.followExcludeState,
-        max: 255,
-        entity_category: "config",
         device: serverDeviceBlock,
       },
     },
