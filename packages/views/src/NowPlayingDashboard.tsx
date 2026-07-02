@@ -7,11 +7,15 @@ import {
 } from "./viewStyles.ts"
 
 /**
- * Now-playing view, dashboard variant: a play-state glyph + banner, the
- * clock in the top-right corner, album art beside the artist/title block,
- * and the date in a footer strip — the old panel's time + date + track
- * combination in one view. Time/date arrive pre-formatted from the server.
- * Inline styles + flexbox only (Satori-safe).
+ * Now-playing view, dashboard variant.
+ *
+ * Large panels: a play-state glyph + banner, the clock in the top-right
+ * corner, album art beside the artist/title/album block, and the date in a
+ * footer strip. Small panels (≤200px tall) drop the banner row entirely —
+ * the space goes to the track text (artist/title/album beside the art) and
+ * the date + time share one footer line in compact forms ("07-01W",
+ * "11:50p"), which the server pre-formats. Inline styles + flexbox only
+ * (Satori-safe).
  */
 export type NowPlayingDashboardProps =
   NowPlayingViewProps & {
@@ -19,12 +23,15 @@ export type NowPlayingDashboardProps =
     date: string
   }
 
+const COMPACT_PANEL_MAX_HEIGHT = 200
+
 export const NowPlayingDashboard = ({
   width,
   height,
   colourMode,
   artist,
   title,
+  album,
   isPlaying,
   time,
   date,
@@ -35,16 +42,31 @@ export const NowPlayingDashboard = ({
     e6Colour: "#d90000",
   })
   const hasArtwork = artworkDataUri !== undefined
+  const isCompactPanel = height <= COMPACT_PANEL_MAX_HEIGHT
 
   const bannerFontSize = Math.round(height * 0.08)
   const timeFontSize = Math.round(height * 0.12)
-  const artistFontSize = Math.round(height * 0.2)
-  const titleFontSize = Math.round(height * 0.14)
-  const dateFontSize = Math.round(height * 0.1)
-  const padding = Math.round(height * 0.07)
+  const artistFontSize = Math.round(
+    height * (isCompactPanel ? 0.16 : 0.2),
+  )
+  const titleFontSize = Math.round(
+    height * (isCompactPanel ? 0.13 : 0.14),
+  )
+  const albumFontSize = Math.round(
+    height * (isCompactPanel ? 0.11 : 0.1),
+  )
+  const dateFontSize = Math.round(
+    height * (isCompactPanel ? 0.12 : 0.1),
+  )
+  const padding = Math.round(height * 0.06)
 
   const artworkSide = Math.round(
-    height * (colourMode === "e6" ? 0.5 : 0.44),
+    height *
+      (colourMode === "e6"
+        ? 0.5
+        : isCompactPanel
+          ? 0.6
+          : 0.44),
   )
   const solidLineThickness = Math.max(
     2,
@@ -149,26 +171,33 @@ export const NowPlayingDashboard = ({
     marginLeft: hasArtwork ? Math.round(height * 0.06) : 0,
   }
 
-  const artistStyle: CSSProperties = {
+  const truncatingLineStyle: CSSProperties = {
     display: "flex",
     maxWidth: "100%",
-    fontSize: artistFontSize,
-    fontWeight: 700,
-    lineHeight: 1.05,
     overflow: "hidden",
     whiteSpace: "nowrap",
     textOverflow: "ellipsis",
   }
 
+  const artistStyle: CSSProperties = {
+    ...truncatingLineStyle,
+    fontSize: artistFontSize,
+    fontWeight: 700,
+    lineHeight: 1.05,
+  }
+
   const titleStyle: CSSProperties = {
-    display: "flex",
-    maxWidth: "100%",
+    ...truncatingLineStyle,
     fontSize: titleFontSize,
     lineHeight: 1.1,
-    marginTop: Math.round(height * 0.03),
-    overflow: "hidden",
-    whiteSpace: "nowrap",
-    textOverflow: "ellipsis",
+    marginTop: Math.round(height * 0.02),
+  }
+
+  const albumStyle: CSSProperties = {
+    ...truncatingLineStyle,
+    fontSize: albumFontSize,
+    lineHeight: 1.1,
+    marginTop: Math.round(height * 0.015),
   }
 
   const footerRuleStyle: CSSProperties = {
@@ -181,34 +210,38 @@ export const NowPlayingDashboard = ({
   const footerRowStyle: CSSProperties = {
     display: "flex",
     flexDirection: "row",
-    marginTop: Math.round(height * 0.035),
+    justifyContent: "space-between",
+    marginTop: Math.round(height * 0.03),
   }
 
   const dateStyle: CSSProperties = {
     display: "flex",
     fontSize: dateFontSize,
+    fontWeight: isCompactPanel ? 700 : 400,
     lineHeight: 1,
   }
 
   return (
     <div style={rootStyle}>
-      <div style={headerRowStyle}>
-        <div style={bannerGroupStyle}>
-          {isPlaying ? (
-            <div style={playGlyphStyle} />
-          ) : (
-            <div style={pauseGlyphStyle}>
-              <div style={pauseBarStyle} />
-              <div style={secondPauseBarStyle} />
+      {isCompactPanel ? null : (
+        <div style={headerRowStyle}>
+          <div style={bannerGroupStyle}>
+            {isPlaying ? (
+              <div style={playGlyphStyle} />
+            ) : (
+              <div style={pauseGlyphStyle}>
+                <div style={pauseBarStyle} />
+                <div style={secondPauseBarStyle} />
+              </div>
+            )}
+            <div style={bannerStyle}>
+              {isPlaying ? "Now Playing" : "Last Played"}
             </div>
-          )}
-          <div style={bannerStyle}>
-            {isPlaying ? "Now Playing" : "Last Played"}
           </div>
-        </div>
 
-        <div style={timeStyle}>{time}</div>
-      </div>
+          <div style={timeStyle}>{time}</div>
+        </div>
+      )}
 
       <div style={bodyRowStyle}>
         {hasArtwork ? (
@@ -224,6 +257,9 @@ export const NowPlayingDashboard = ({
         <div style={trackColumnStyle}>
           <div style={artistStyle}>{artist}</div>
           <div style={titleStyle}>{title}</div>
+          {album ? (
+            <div style={albumStyle}>{album}</div>
+          ) : null}
         </div>
       </div>
 
@@ -231,6 +267,9 @@ export const NowPlayingDashboard = ({
 
       <div style={footerRowStyle}>
         <div style={dateStyle}>{date}</div>
+        {isCompactPanel ? (
+          <div style={timeStyle}>{time}</div>
+        ) : null}
       </div>
     </div>
   )

@@ -44,8 +44,20 @@ const readStringAttribute = ({
   key: string
 }) => {
   const value = attributes[key]
-  return typeof value === "string" ? value : ""
+  return typeof value === "string"
+    ? stripDecorativeNotes(value)
+    : ""
 }
+
+/**
+ * YouTube Music (and friends) decorate titles with ♫/♪ glyphs; they render
+ * poorly at panel sizes and waste width, so strip them from every field.
+ */
+const stripDecorativeNotes = (value: string) =>
+  value
+    .replace(/[♪♫♬♩]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
 
 /**
  * Maps one HA `media_player` state to the now-playing view's data. A player
@@ -83,6 +95,10 @@ export const mapHomeAssistantStateToNowPlaying = (
     return IDLE_NOW_PLAYING
   }
 
+  const album = readStringAttribute({
+    attributes: entityState.attributes,
+    key: "media_album_name",
+  })
   const artworkPath = readStringAttribute({
     attributes: entityState.attributes,
     key: "entity_picture",
@@ -91,6 +107,7 @@ export const mapHomeAssistantStateToNowPlaying = (
   return {
     artist: artist || "—",
     title: title || "—",
+    ...(album ? { album } : {}),
     isPlaying: entityState.state === "playing",
     ...(artworkPath ? { artworkPath } : {}),
   }

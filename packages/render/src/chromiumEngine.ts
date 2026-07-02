@@ -4,6 +4,7 @@ import type {
   RenderEngine,
   RenderRequest,
 } from "./engine.ts"
+import { FONT_FAMILY, loadFontBytes } from "./fonts.ts"
 
 /**
  * The headless-Chromium render engine (the handoff's recommended default). It
@@ -16,20 +17,27 @@ import type {
  * The trade-off is weight (bundled Chromium) and per-render latency.
  */
 
-/** Wrap SSR'd view markup in a minimal, zero-margin full-bleed document. */
+/**
+ * Wrap SSR'd view markup in a minimal, zero-margin full-bleed document. The
+ * panel font is embedded as base64 `@font-face` so rendering is identical
+ * everywhere — dev machine, CI, and the fontless container image.
+ */
 const buildHtmlDocument = ({
   width,
   height,
   bodyMarkup,
+  fontFaceCss,
 }: {
   width: number
   height: number
   bodyMarkup: string
+  fontFaceCss: string
 }) => `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
 <style>
+  ${fontFaceCss}
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: ${width}px; height: ${height}px; }
   body { overflow: hidden; }
@@ -37,6 +45,26 @@ const buildHtmlDocument = ({
 </head>
 <body>${bodyMarkup}</body>
 </html>`
+
+const buildFontFaceCss = async () => {
+  const { regularData, boldData } = await loadFontBytes()
+  const toFontFace = ({
+    data,
+    weight,
+  }: {
+    data: Buffer
+    weight: number
+  }) => `@font-face {
+    font-family: "${FONT_FAMILY}";
+    font-weight: ${weight};
+    src: url(data:font/ttf;base64,${data.toString("base64")}) format("truetype");
+  }`
+
+  return [
+    toFontFace({ data: regularData, weight: 400 }),
+    toFontFace({ data: boldData, weight: 700 }),
+  ].join("\n")
+}
 
 /**
  * Create a Chromium engine backed by one long-lived browser process. Call
@@ -53,6 +81,7 @@ export const createChromiumEngine = async (): Promise<
   const browser: Browser = await chromium.launch({
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
   })
+  const fontFaceCss = await buildFontFaceCss()
 
   const render = async ({
     element,
@@ -75,6 +104,7 @@ export const createChromiumEngine = async (): Promise<
           width,
           height,
           bodyMarkup: renderToStaticMarkup(element),
+          fontFaceCss,
         }),
         { waitUntil: "load" },
       )

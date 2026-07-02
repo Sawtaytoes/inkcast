@@ -65,6 +65,32 @@ const formatDate = (now: Date) =>
     day: "numeric",
   }).format(now)
 
+/** `11:50p` — every character earns its place on a 250px panel. */
+const formatCompactTime = (now: Date) =>
+  new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+    .format(now)
+    .replace(" AM", "a")
+    .replace(" PM", "p")
+
+/** `07-01W` — numeric date plus the weekday initial. */
+const formatCompactDate = (now: Date) => {
+  const month = String(now.getMonth() + 1).padStart(2, "0")
+  const day = String(now.getDate()).padStart(2, "0")
+  const weekdayInitial = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+  })
+    .format(now)
+    .slice(0, 1)
+  return `${month}-${day}${weekdayInitial}`
+}
+
+/** Small panels get the compact date/time formats. */
+const COMPACT_PANEL_MAX_HEIGHT = 200
+
 /** Build the React element for a device's active view at a given instant. */
 export const renderViewElement = ({
   viewName,
@@ -112,10 +138,16 @@ export const renderViewElement = ({
     })
   }
 
+  const isCompactPanel =
+    device.height <= COMPACT_PANEL_MAX_HEIGHT
   return createElement(NowPlayingDashboard, {
     ...panel,
     ...nowPlayingProps,
-    time: formatTime(now),
-    date: formatDate(now),
+    time: isCompactPanel
+      ? formatCompactTime(now)
+      : formatTime(now),
+    date: isCompactPanel
+      ? formatCompactDate(now)
+      : formatDate(now),
   })
 }

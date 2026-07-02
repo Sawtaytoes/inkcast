@@ -7,6 +7,7 @@
 export type NowPlayingData = {
   artist: string
   title: string
+  album?: string
   isPlaying: boolean
   /** HA `entity_picture` path (album art / Plex poster), if the player has one. */
   artworkPath?: string

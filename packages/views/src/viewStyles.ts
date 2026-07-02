@@ -7,7 +7,8 @@ import type { ViewColourMode } from "./viewProps.ts"
  * copied into each component.
  */
 
-export const PANEL_FONT_FAMILY = "DejaVu Sans, sans-serif"
+export const PANEL_FONT_FAMILY =
+  '"Atkinson Hyperlegible", "DejaVu Sans", sans-serif'
 
 /** The Satori-safe base every view's root element starts from. */
 export const buildPanelRootStyle = ({

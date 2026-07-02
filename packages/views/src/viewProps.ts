@@ -15,6 +15,7 @@ export type PanelViewProps = {
 export type NowPlayingViewProps = PanelViewProps & {
   artist: string
   title: string
+  album?: string
   isPlaying: boolean
   /** Album art / Plex poster as a data: URI, pre-fetched server-side. */
   artworkDataUri?: string
