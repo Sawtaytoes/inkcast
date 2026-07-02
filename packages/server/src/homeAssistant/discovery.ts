@@ -72,14 +72,29 @@ export const buildDeviceTopics = ({
     brightnessState: `${base}/brightness`,
     saturationCommand: `${base}/saturation/set`,
     saturationState: `${base}/saturation`,
+    idleViewCommand: `${base}/idle_view/set`,
+    idleViewState: `${base}/idle_view`,
+    idleMinutesCommand: `${base}/idle_minutes/set`,
+    idleMinutesState: `${base}/idle_minutes`,
   }
 }
+
+/** Server-wide (per-install, not per-device) config topics. */
+export const buildGlobalTopics = (
+  baseTopic = "inkcast",
+) => ({
+  followExcludeCommand: `${baseTopic}/config/follow_exclude/set`,
+  followExcludeState: `${baseTopic}/config/follow_exclude`,
+})
 
 /** The HA-facing colour-mode option strings (double as MQTT payloads). */
 export const COLOUR_MODE_OPTIONS = [
   "Color",
   "Black & White",
 ] as const
+
+/** The idle-view select option that disables the idle fallback. */
+export const IDLE_VIEW_NONE_OPTION = "None"
 
 /** The HA `device` block that ties every entity to one physical display. */
 const buildDeviceBlock = (device: DeviceMetadata) => ({
@@ -236,6 +251,42 @@ export const buildDiscoveryMessages = ({
       },
     },
     {
+      // Which view this panel falls back to when its now-playing selection
+      // has had nothing playing for the idle timeout. "None" disables the
+      // fallback (Home Assistant automations stay fully in control).
+      topic: discoveryTopic("select", "idle_view"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Now Playing: Idle view",
+        unique_id: `inkcast_${device.id}_idle_view`,
+        options: [IDLE_VIEW_NONE_OPTION].concat(
+          Array.from(viewNames),
+        ),
+        command_topic: topics.idleViewCommand,
+        state_topic: topics.idleViewState,
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
+      topic: discoveryTopic("number", "idle_minutes"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Now Playing: Idle minutes",
+        unique_id: `inkcast_${device.id}_idle_minutes`,
+        command_topic: topics.idleMinutesCommand,
+        state_topic: topics.idleMinutesState,
+        min: 1,
+        max: 240,
+        step: 1,
+        unit_of_measurement: "min",
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
       // Which Immich people feed this device's Photo Frame view
       // (comma-separated names or person UUIDs). The retained state topic
       // doubles as the persistence layer.
@@ -302,6 +353,55 @@ export const buildDiscoveryMessages = ({
         device_class: "timestamp",
         entity_category: "diagnostic",
         device: deviceBlock,
+      },
+    },
+  ]
+}
+
+/**
+ * Discovery messages for the server-wide "Inkcast Server" device — global
+ * settings that aren't tied to one panel, exposed as normal HA entities so
+ * they're editable, automatable, and visible (instead of hiding in env
+ * vars). Retained state = persistence, exactly like the per-device knobs.
+ */
+export const buildGlobalDiscoveryMessages = (
+  config: HaDiscoveryConfig = {},
+): DiscoveryMessage[] => {
+  const discoveryPrefix =
+    config.discoveryPrefix ?? "homeassistant"
+  const nodeId = config.nodeId ?? "inkcast"
+  const topics = buildGlobalTopics(config.baseTopic)
+
+  const availability = {
+    availability_topic: buildAvailabilityTopic(
+      config.baseTopic,
+    ),
+    payload_available: "online",
+    payload_not_available: "offline",
+  }
+  const serverDeviceBlock = {
+    identifiers: ["inkcast_server"],
+    name: "Inkcast Server",
+    manufacturer: "Inkcast",
+    model: "render server",
+  }
+
+  return [
+    {
+      // media_player entities follow mode must IGNORE even while playing
+      // (comma-separated entity ids) — e.g. bedtime-music speakers.
+      // Applied live; no restart needed.
+      topic: `${discoveryPrefix}/text/${nodeId}/server_follow_exclude/config`,
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Follow: Excluded players",
+        unique_id: "inkcast_server_follow_exclude",
+        command_topic: topics.followExcludeCommand,
+        state_topic: topics.followExcludeState,
+        max: 255,
+        entity_category: "config",
+        device: serverDeviceBlock,
       },
     },
   ]

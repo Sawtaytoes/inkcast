@@ -7,6 +7,7 @@ import {
   buildAvailabilityTopic,
   buildDeviceTopics,
   buildDiscoveryMessages,
+  buildGlobalDiscoveryMessages,
 } from "./discovery.ts"
 
 describe("buildDeviceTopics", () => {
@@ -62,12 +63,43 @@ describe("buildDiscoveryMessages", () => {
       "select", // Display: Dither
       "number", // Display: Brightness
       "number", // Display: Saturation
+      "select", // Now Playing: Idle view
+      "number", // Now Playing: Idle minutes
       "text", // Photo Frame: People
       "text", // Photo Frame: Query
       "button", // Photo Frame: Next photo
       "button", // Photo Frame: Previous photo
       "sensor", // last render
     ])
+  })
+
+  test("the idle-view select offers None plus every view", () => {
+    const idleViewMessage = messages.find((message) =>
+      message.topic.includes("_idle_view/"),
+    )
+    expect(idleViewMessage?.payload.options).toEqual([
+      "None",
+      "Now Playing (Dashboard)",
+      "Clock",
+    ])
+  })
+
+  test("the global device exposes the follow-exclusion text", () => {
+    const globalMessages = buildGlobalDiscoveryMessages()
+    expect(globalMessages).toHaveLength(1)
+    expect(globalMessages[0].topic).toBe(
+      "homeassistant/text/inkcast/server_follow_exclude/config",
+    )
+    expect(globalMessages[0].payload.command_topic).toBe(
+      "inkcast/config/follow_exclude/set",
+    )
+    expect(
+      (
+        globalMessages[0].payload.device as {
+          name: string
+        }
+      ).name,
+    ).toBe("Inkcast Server")
   })
 
   test("adds the colour-mode select on a colour panel only", () => {

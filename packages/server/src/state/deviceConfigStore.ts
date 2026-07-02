@@ -57,6 +57,21 @@ export type DeviceConfigStore = {
     deviceId: string
     percent: number
   }) => void
+  /**
+   * HA-selected idle-fallback view. "None" disables the fallback; undefined
+   * = not set this run (the device registry default applies).
+   */
+  getIdleViewName: (deviceId: string) => string | undefined
+  setIdleViewName: (params: {
+    deviceId: string
+    viewName: string
+  }) => void
+  /** HA-selected idle timeout, minutes (undefined = default). */
+  getIdleMinutes: (deviceId: string) => number | undefined
+  setIdleMinutes: (params: {
+    deviceId: string
+    minutes: number
+  }) => void
 }
 
 export const createDeviceConfigStore =
@@ -73,6 +88,8 @@ export const createDeviceConfigStore =
     >()
     const brightnessByDeviceId = new Map<string, number>()
     const saturationByDeviceId = new Map<string, number>()
+    const idleViewByDeviceId = new Map<string, string>()
+    const idleMinutesByDeviceId = new Map<string, number>()
 
     return {
       getPhotoPeople: (deviceId) =>
@@ -104,6 +121,16 @@ export const createDeviceConfigStore =
         saturationByDeviceId.get(deviceId),
       setSaturationPercent: ({ deviceId, percent }) => {
         saturationByDeviceId.set(deviceId, percent)
+      },
+      getIdleViewName: (deviceId) =>
+        idleViewByDeviceId.get(deviceId),
+      setIdleViewName: ({ deviceId, viewName }) => {
+        idleViewByDeviceId.set(deviceId, viewName)
+      },
+      getIdleMinutes: (deviceId) =>
+        idleMinutesByDeviceId.get(deviceId),
+      setIdleMinutes: ({ deviceId, minutes }) => {
+        idleMinutesByDeviceId.set(deviceId, minutes)
       },
     }
   }

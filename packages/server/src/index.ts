@@ -18,13 +18,20 @@ import {
   buildAvailabilityTopic,
   buildDeviceTopics,
   buildDiscoveryMessages,
+  buildGlobalDiscoveryMessages,
+  buildGlobalTopics,
+  IDLE_VIEW_NONE_OPTION,
 } from "./homeAssistant/discovery.ts"
 import { createMqttPublisher } from "./mqtt/publisher.ts"
-import { createPushController } from "./pushController.ts"
+import {
+  createPushController,
+  DEFAULT_IDLE_MINUTES,
+} from "./pushController.ts"
 import { createRenderService } from "./render/renderService.ts"
 import { startClockTicker } from "./schedulers/clockTicker.ts"
 import { createDeviceConfigStore } from "./state/deviceConfigStore.ts"
 import { createDeviceStore } from "./state/deviceStore.ts"
+import { createGlobalConfigStore } from "./state/globalConfigStore.ts"
 import { createViewDataStore } from "./state/viewDataStore.ts"
 import {
   getIsClockBearingView,
@@ -111,6 +118,7 @@ const main = async () => {
   })
   const viewDataStore = createViewDataStore()
   const deviceConfigStore = createDeviceConfigStore()
+  const globalConfigStore = createGlobalConfigStore()
   const pushController = createPushController({
     devices: config.devices,
     deviceStore,
@@ -119,7 +127,6 @@ const main = async () => {
     renderService,
     publisher,
     baseTopic,
-    idleMinutes: config.idleMinutes,
   })
 
   const pushDeviceLogged = (deviceId: string) => {
@@ -188,8 +195,8 @@ const main = async () => {
         followedPlatforms: hasUnpinnedDevice
           ? config.homeAssistant.followedPlatforms
           : [],
-        followExcludedEntityIds:
-          config.homeAssistant.followExcludedEntityIds,
+        getFollowExcludedEntityIds:
+          globalConfigStore.getFollowExcludedEntityIds,
         weatherEntityId:
           config.homeAssistant.weatherEntityId,
         viewDataStore,
@@ -270,25 +277,32 @@ const main = async () => {
   }
 
   if (publisher.isEnabled) {
-    // Advertise every device to HA (retained discovery configs).
+    // Advertise every device + the server-wide config device to HA
+    // (retained discovery configs).
+    const discoveryConfig = {
+      discoveryPrefix: config.mqtt.discoveryPrefix,
+      nodeId: config.mqtt.nodeId,
+      baseTopic,
+    }
     await Promise.all(
-      config.devices.flatMap((device) =>
-        buildDiscoveryMessages({
-          device,
-          viewNames: VIEW_NAMES,
-          config: {
-            discoveryPrefix: config.mqtt.discoveryPrefix,
-            nodeId: config.mqtt.nodeId,
-            baseTopic,
-          },
-        }).map((message) =>
+      config.devices
+        .flatMap((device) =>
+          buildDiscoveryMessages({
+            device,
+            viewNames: VIEW_NAMES,
+            config: discoveryConfig,
+          }),
+        )
+        .concat(
+          buildGlobalDiscoveryMessages(discoveryConfig),
+        )
+        .map((message) =>
           publisher.publish({
             topic: message.topic,
             payload: JSON.stringify(message.payload),
             isRetained: message.isRetained,
           }),
         ),
-      ),
     )
 
     // The HA-editable config knobs, all following one shape: a command
@@ -426,6 +440,54 @@ const main = async () => {
             },
           },
         ],
+        [
+          "idleView",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              if (
+                payload !== IDLE_VIEW_NONE_OPTION &&
+                !getIsViewName(payload)
+              ) {
+                return null
+              }
+              deviceConfigStore.setIdleViewName({
+                deviceId,
+                viewName: payload,
+              })
+              return payload
+            },
+            getHasValue: (deviceId) =>
+              deviceConfigStore.getIdleViewName(
+                deviceId,
+              ) !== undefined,
+            onApplied: async (deviceId) => {
+              await pushController.pushDevice(deviceId)
+            },
+          },
+        ],
+        [
+          "idleMinutes",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              const value = Number.parseFloat(payload)
+              if (Number.isNaN(value)) {
+                return null
+              }
+              const minutes = Math.min(
+                240,
+                Math.max(1, Math.round(value)),
+              )
+              deviceConfigStore.setIdleMinutes({
+                deviceId,
+                minutes,
+              })
+              return String(minutes)
+            },
+            getHasValue: (deviceId) =>
+              deviceConfigStore.getIdleMinutes(deviceId) !==
+              undefined,
+          },
+        ],
       ])
 
     /** Knob kind → its command/state topics for one device. */
@@ -468,11 +530,20 @@ const main = async () => {
           command: topics.saturationCommand,
           state: topics.saturationState,
         },
+        idleView: {
+          command: topics.idleViewCommand,
+          state: topics.idleViewState,
+        },
+        idleMinutes: {
+          command: topics.idleMinutesCommand,
+          state: topics.idleMinutesState,
+        },
       }
       return byKind[kind]
     }
 
     type TopicRoute = {
+      /** "" for server-wide (global) topics. */
       deviceId: string
       kind:
         | "refresh"
@@ -481,6 +552,8 @@ const main = async () => {
         | "photoNext"
         | "photoPrevious"
         | "knob"
+        | "followExclude"
+        | "followExcludeRestore"
       /** Set when kind is "knob". */
       knobKind?: string
       /** True for a knob's retained-state (boot restore) topic. */
@@ -488,6 +561,15 @@ const main = async () => {
     }
 
     const commandRoutes = new Map<string, TopicRoute>()
+    const globalTopics = buildGlobalTopics(baseTopic)
+    commandRoutes.set(globalTopics.followExcludeCommand, {
+      deviceId: "",
+      kind: "followExclude",
+    })
+    commandRoutes.set(globalTopics.followExcludeState, {
+      deviceId: "",
+      kind: "followExcludeRestore",
+    })
     config.devices.forEach((device) => {
       const topics = buildDeviceTopics({
         baseTopic,
@@ -572,6 +654,36 @@ const main = async () => {
               isExplicit: false,
             })
             await pushController.pushDevice(route.deviceId)
+          }
+          return
+        }
+        if (
+          route.kind === "followExclude" ||
+          route.kind === "followExcludeRestore"
+        ) {
+          const isRestore =
+            route.kind === "followExcludeRestore"
+          if (
+            isRestore &&
+            globalConfigStore.getHasFollowExcludedEntityIds()
+          ) {
+            return
+          }
+          const entityIds = payload
+            .split(",")
+            .map((entityId) => entityId.trim())
+            .filter((entityId) => entityId.length > 0)
+          globalConfigStore.setFollowExcludedEntityIds(
+            entityIds,
+          )
+          if (!isRestore) {
+            await publisher.publish({
+              topic: globalTopics.followExcludeState,
+              payload: entityIds.join(", "),
+              isRetained: true,
+            })
+            // Evict a currently-shown excluded player right away.
+            nowPlayingAdapter?.refreshExclusions()
           }
           return
         }
@@ -680,6 +792,26 @@ const main = async () => {
                 device.id,
               ) !== undefined,
             payload: "100",
+          },
+          {
+            kind: "idleView",
+            hasValue:
+              deviceConfigStore.getIdleViewName(
+                device.id,
+              ) !== undefined,
+            payload:
+              device.idleViewName &&
+              getIsViewName(device.idleViewName)
+                ? device.idleViewName
+                : IDLE_VIEW_NONE_OPTION,
+          },
+          {
+            kind: "idleMinutes",
+            hasValue:
+              deviceConfigStore.getIdleMinutes(
+                device.id,
+              ) !== undefined,
+            payload: String(DEFAULT_IDLE_MINUTES),
           },
         ]
         seedPairs

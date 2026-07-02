@@ -61,20 +61,24 @@ export const fitFontSize = ({
   baseFontSize,
   availableWidth,
   text,
+  lineCount = 1,
 }: {
   baseFontSize: number
   availableWidth: number
   text: string
+  /** Lines the text may wrap across (width budget = width × lines). */
+  lineCount?: number
 }) => {
+  const widthBudget = availableWidth * lineCount
   const estimatedWidth =
     baseFontSize * AVERAGE_GLYPH_ADVANCE_RATIO * text.length
 
-  if (estimatedWidth <= availableWidth) {
+  if (estimatedWidth <= widthBudget) {
     return baseFontSize
   }
 
   const fittedFontSize =
-    availableWidth /
+    widthBudget /
     (AVERAGE_GLYPH_ADVANCE_RATIO * text.length)
 
   return Math.max(

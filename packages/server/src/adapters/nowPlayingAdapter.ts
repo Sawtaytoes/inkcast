@@ -7,6 +7,7 @@ import {
   map,
   merge,
   mergeMap,
+  Subject,
   scan,
   share,
 } from "rxjs"
@@ -240,7 +241,7 @@ export const createNowPlayingAdapter = ({
   homeAssistantToken,
   pinnedEntityIds,
   followedPlatforms,
-  followExcludedEntityIds = [],
+  getFollowExcludedEntityIds = () => new Set<string>(),
   weatherEntityId = "",
   viewDataStore,
   onNowPlayingChanged,
@@ -250,8 +251,11 @@ export const createNowPlayingAdapter = ({
   homeAssistantToken: string
   pinnedEntityIds: readonly string[]
   followedPlatforms: readonly string[]
-  /** Players follow mode ignores (bedtime speakers and the like). */
-  followExcludedEntityIds?: readonly string[]
+  /**
+   * Players follow mode ignores (bedtime speakers and the like). Read on
+   * every update so the HA-edited exclusion list applies live.
+   */
+  getFollowExcludedEntityIds?: () => ReadonlySet<string>
   /** HA `weather` entity to stream for the clock views ("" = off). */
   weatherEntityId?: string
   viewDataStore: ViewDataStore
@@ -265,25 +269,31 @@ export const createNowPlayingAdapter = ({
       ? pinnedEntityIds.concat(weatherEntityId)
       : pinnedEntityIds,
     followedPlatforms,
-    followExcludedEntityIds,
   }).pipe(share())
 
-  const updates = entityStates.pipe(
-    filter(
-      (entityState) =>
-        entityState.entityId !== weatherEntityId,
+  // Synthetic "this player is now excluded" retractions: an IDLE update for
+  // the excluded entity so the follow reducer drops its metadata instead of
+  // keeping it on the panel forever.
+  const retractionUpdates = new Subject<NowPlayingUpdate>()
+
+  const updates = merge(
+    entityStates.pipe(
+      filter(
+        (entityState) =>
+          entityState.entityId !== weatherEntityId,
+      ),
+      map(
+        (entityState): NowPlayingUpdate => ({
+          entityId: entityState.entityId,
+          data: mapHomeAssistantStateToNowPlaying(
+            entityState,
+          ),
+          isFollowCandidate: entityState.isFollowCandidate,
+        }),
+      ),
     ),
-    map(
-      (entityState): NowPlayingUpdate => ({
-        entityId: entityState.entityId,
-        data: mapHomeAssistantStateToNowPlaying(
-          entityState,
-        ),
-        isFollowCandidate: entityState.isFollowCandidate,
-      }),
-    ),
-    share(),
-  )
+    retractionUpdates,
+  ).pipe(share())
 
   const weatherSubscription = weatherEntityId
     ? entityStates
@@ -332,7 +342,16 @@ export const createNowPlayingAdapter = ({
   )
 
   const followedUpdates = updates.pipe(
-    filter((update) => update.isFollowCandidate),
+    // Excluded players don't count as follow candidates — except their own
+    // IDLE retraction, which must reach the reducer to evict them.
+    filter(
+      (update) =>
+        update.isFollowCandidate &&
+        (!getFollowExcludedEntityIds().has(
+          update.entityId,
+        ) ||
+          update.data === IDLE_NOW_PLAYING),
+    ),
     scan(reduceFollowedPlayer, EMPTY_FOLLOW_ACCUMULATOR),
     map((accumulator) => ({
       entityKey: FOLLOWED_NOW_PLAYING_KEY,
@@ -377,6 +396,21 @@ export const createNowPlayingAdapter = ({
     })
 
   return {
+    /**
+     * Call after the exclusion list changes: pushes an IDLE retraction for
+     * every excluded player so a currently-shown one leaves the panel.
+     */
+    refreshExclusions: () => {
+      Array.from(getFollowExcludedEntityIds()).forEach(
+        (entityId) => {
+          retractionUpdates.next({
+            entityId,
+            data: IDLE_NOW_PLAYING,
+            isFollowCandidate: true,
+          })
+        },
+      )
+    },
     close: () => {
       subscription.unsubscribe()
       weatherSubscription?.unsubscribe()

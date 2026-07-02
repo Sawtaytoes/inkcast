@@ -57,6 +57,15 @@ export const NowPlayingDashboard = ({
   const hasVisibleArtist =
     trimmedArtist !== "" &&
     trimmedArtist !== ARTIST_PLACEHOLDER
+  // Generated playlists (YouTube Music) often cram everything into the
+  // title with no artist/album — give the lonely title the freed-up lines
+  // instead of truncating one long line.
+  const titleLineCount =
+    !hasVisibleArtist && !album
+      ? isCompactPanel
+        ? 2
+        : 3
+      : 1
 
   const bannerFontSize = Math.round(height * 0.08)
   const timeFontSize = Math.round(height * 0.12)
@@ -95,6 +104,7 @@ export const NowPlayingDashboard = ({
     baseFontSize: baseTitleFontSize,
     availableWidth: trackTextAvailableWidth,
     text: title,
+    lineCount: titleLineCount,
   })
   // The title is the anchor: when a long title shrinks below the artist's
   // base size, the artist/album cap below it so the hierarchy never inverts.
@@ -226,12 +236,31 @@ export const NowPlayingDashboard = ({
     textOverflow: "ellipsis",
   }
 
-  const titleStyle: CSSProperties = {
-    ...truncatingLineStyle,
-    fontSize: titleFontSize,
-    fontWeight: 700,
-    lineHeight: 1.05,
-  }
+  const titleLineHeight = 1.12
+  const titleStyle: CSSProperties =
+    titleLineCount > 1
+      ? {
+          // Wrapping variant: normal white-space across a capped number of
+          // lines, clipped at the line boundary (works under both engines,
+          // unlike -webkit-line-clamp).
+          display: "flex",
+          maxWidth: "100%",
+          overflow: "hidden",
+          fontSize: titleFontSize,
+          fontWeight: 700,
+          lineHeight: titleLineHeight,
+          maxHeight: Math.round(
+            titleFontSize *
+              titleLineHeight *
+              titleLineCount,
+          ),
+        }
+      : {
+          ...truncatingLineStyle,
+          fontSize: titleFontSize,
+          fontWeight: 700,
+          lineHeight: 1.05,
+        }
 
   const artistStyle: CSSProperties = {
     ...truncatingLineStyle,

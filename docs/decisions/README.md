@@ -7,6 +7,7 @@ proposing a change; a settled decision here overrides default instinct.
 
 | Date | Decision | Status |
 | --- | --- | --- |
+| 2026-07-02 | [Server-wide settings live in HA entities (Inkcast Server MQTT device), not env vars](2026-07-02-global-config-lives-in-ha-entities.md) | Accepted |
 | 2026-07-02 | [Now-playing views fall back to a per-device idle view when nothing plays](2026-07-02-now-playing-idle-fallback.md) | Accepted |
 | 2026-07-02 | [Photo-frame face awareness shifts the crop; it never zooms in on faces](2026-07-02-face-crop-shifts-never-zooms.md) | Accepted |
 | 2026-07-02 | [Now-playing layouts put the track title first, above the artist](2026-07-02-title-above-artist.md) | Accepted |

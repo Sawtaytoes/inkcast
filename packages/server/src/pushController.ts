@@ -1,7 +1,10 @@
 import { MONO_PALETTE } from "@inkcast/core/panels/palette"
 import { FOLLOWED_NOW_PLAYING_KEY } from "./adapters/nowPlayingAdapter.ts"
 import type { ConfiguredDevice } from "./config/env.ts"
-import { buildDeviceTopics } from "./homeAssistant/discovery.ts"
+import {
+  buildDeviceTopics,
+  IDLE_VIEW_NONE_OPTION,
+} from "./homeAssistant/discovery.ts"
 import type { MqttPublisher } from "./mqtt/publisher.ts"
 import type { RenderService } from "./render/renderService.ts"
 import type { DeviceConfigStore } from "./state/deviceConfigStore.ts"
@@ -12,6 +15,9 @@ import {
   getIsViewName,
   type ViewName,
 } from "./views/registry.ts"
+
+/** Idle timeout when the HA "Idle minutes" knob hasn't been set. */
+export const DEFAULT_IDLE_MINUTES = 5
 
 /**
  * The single place that renders a device's current view and pushes it to MQTT
@@ -45,7 +51,6 @@ export const createPushController = ({
   renderService,
   publisher,
   baseTopic,
-  idleMinutes,
 }: {
   devices: readonly ConfiguredDevice[]
   deviceStore: DeviceStore
@@ -54,12 +59,10 @@ export const createPushController = ({
   renderService: RenderService
   publisher: MqttPublisher
   baseTopic: string
-  idleMinutes: number
 }): PushController => {
   const deviceById = new Map(
     devices.map((device) => [device.id, device]),
   )
-  const idleMilliseconds = idleMinutes * 60_000
 
   const getNowPlayingKey = (device: ConfiguredDevice) =>
     device.nowPlayingEntityId ?? FOLLOWED_NOW_PLAYING_KEY
@@ -67,11 +70,19 @@ export const createPushController = ({
   const getEffectiveView = (deviceId: string) => {
     const device = deviceById.get(deviceId)
     const activeView = deviceStore.getActiveView(deviceId)
+    if (!device || !getIsNowPlayingView(activeView)) {
+      return activeView
+    }
+
+    // The HA "Idle view" select overrides the registry default; "None"
+    // disables the fallback (HA automations stay fully in control).
+    const idleViewName =
+      deviceConfigStore.getIdleViewName(deviceId) ??
+      device.idleViewName
     if (
-      !device ||
-      !getIsNowPlayingView(activeView) ||
-      !device.idleViewName ||
-      !getIsViewName(device.idleViewName)
+      !idleViewName ||
+      idleViewName === IDLE_VIEW_NONE_OPTION ||
+      !getIsViewName(idleViewName)
     ) {
       return activeView
     }
@@ -83,11 +94,14 @@ export const createPushController = ({
       return activeView
     }
 
+    const idleMilliseconds =
+      (deviceConfigStore.getIdleMinutes(deviceId) ??
+        DEFAULT_IDLE_MINUTES) * 60_000
     // No entry at all = the server has never seen playback: fall back
     // immediately rather than showing a stale/placeholder card forever.
     const stoppedAtMs = entry?.stoppedAtMs ?? 0
     return Date.now() - stoppedAtMs >= idleMilliseconds
-      ? device.idleViewName
+      ? idleViewName
       : activeView
   }
 

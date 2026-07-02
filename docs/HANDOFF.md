@@ -60,7 +60,7 @@ from the HA device page.
 ## Deploy pipeline (how to ship a change)
 
 1. Commit to `master`, push to GitHub (`origin`; push is authorized).
-2. Actions: typecheck + tests (54) → `ghcr.io/sawtaytoes/inkcast:latest`.
+2. Actions: typecheck + tests (56) → `ghcr.io/sawtaytoes/inkcast:latest`.
 3. Bounce the TrueNAS app `inkcast` (MCP `stop_app`/`start_app`) —
    `pull_policy: always`. Env changes: `midclt call --job app.update
    inkcast '{"values": ...}'` on storeman (merge `envs` array; see git log
@@ -68,18 +68,19 @@ from the HA device page.
 4. Verify: `curl http://storeman.octen:8788/health`, `docker logs` (filter
    `ix-inkcast`), `/api/devices/<id>/image` (Bearer `INKCAST_API_TOKEN`).
 
-App env now also carries: `HOME_ASSISTANT_FOLLOW_EXCLUDE_ENTITIES=
-media_player.guest_bedroom_mini_2` (the kids' bedtime-music speaker — the
-famous 12:45a Totoro incident), `HOME_ASSISTANT_WEATHER_ENTITY=
-weather.pirateweather`. Defaults in code: `INKCAST_IDLE_MINUTES=5`,
-`INKCAST_PHOTO_RECENCY_HALF_LIFE_DAYS=365`. Full list: `.env.example`.
+App env also carries `HOME_ASSISTANT_WEATHER_ENTITY=weather.pirateweather`.
+Follow-mode player exclusions (the famous 12:45a Totoro incident: guest +
+kids bedroom speakers) and the per-panel idle view/timeout are HA ENTITIES,
+not env vars — see the "Inkcast Server" device and each panel's config
+section (`decisions/2026-07-02-global-config-lives-in-ha-entities.md`).
+Full env list: `.env.example`.
 
 ## Architecture (current)
 
 ```text
 HA (WS, ws pkg — NOT native WebSocket: HA's multi-MB frames kill undici)
  └─ nowPlayingAdapter: follow players from HOME_ASSISTANT_FOLLOW_PLATFORMS
-    (music_assistant,plex) minus FOLLOW_EXCLUDE_ENTITIES, or pinned entity
+    (music_assistant,plex) minus the HA-edited exclusion list, or pinned entity
     per device → RxJS dedupe/debounce(1s) → artwork fetch → viewDataStore
     (entries carry stoppedAtMs for the idle timer) → push.
     Same socket streams the weather entity → WeatherData → Clock (Weather).
@@ -90,9 +91,10 @@ Immich (REST)
     face-STEERED maximal cover-crop or letterbox → panel PNG → push.
     20-deep per-device history ← Next/Previous photo buttons.
 Idle fallback: pushController.getEffectiveView() — a now-playing selection
-    with nothing playing for INKCAST_IDLE_MINUTES renders idleViewName
-    (pHAT → Clock (Weather), Impression → Photo Frame). Minute ticker
-    re-pushes clock-bearing EFFECTIVE views + any effective-view change.
+    with nothing playing for the HA-set idle minutes renders the HA-set
+    idle view (seeds: pHAT → Clock (Weather), Impression → Photo Frame;
+    "None" disables). Minute ticker re-pushes clock-bearing EFFECTIVE
+    views + any effective-view change.
  ↓
 pushController → renderService (Chromium; Satori alt) → dither pipeline
     (per-device: algorithm override, Color/B&W mode, brightness/saturation
@@ -118,9 +120,16 @@ pushController → renderService (Chromium; Satori alt) → dither pipeline
 Image (Screen) · Select (View: 3 now-playing / Photo Frame / Clock /
 Clock (Weather)) · Buttons (Refresh, Photo Frame: Next/Previous photo) ·
 Config: Display: Dither, Display: Color mode (e6 only, Color|Black & White),
-Display: Brightness %, Display: Saturation %, Photo Frame: People,
-Photo Frame: Query · Sensor (Last render). The `Display:`/`Photo Frame:`
-prefixes are deliberate — HA has no config sub-groups, names are the grouping.
+Display: Brightness %, Display: Saturation %, Now Playing: Idle view
+("None" disables the fallback), Now Playing: Idle minutes, Photo Frame:
+People, Photo Frame: Query · Sensor (Last render). The `Display:`/`Photo
+Frame:`/`Now Playing:` prefixes are deliberate — HA has no config
+sub-groups, names are the grouping.
+
+Plus one server-wide "Inkcast Server" device: `Follow: Excluded players`
+(comma-separated media_player ids; applied LIVE — an excluded player is
+evicted from the panel via a synthetic idle retraction). Topics:
+`inkcast/config/follow_exclude/set|state`.
 
 ### Views (`packages/views/src/`)
 
@@ -151,7 +160,7 @@ prefixes are deliberate — HA has no config sub-groups, names are the grouping.
   `immich-impression-frame`) disabled but kept — rollback is one command
   (see `device-client/README.md`).
 - Commands: `yarn dev:server` · `yarn build` → `node
-  packages/server/dist/index.js` · `yarn typecheck` / `lint` / `test` (54) ·
+  packages/server/dist/index.js` · `yarn typecheck` / `lint` / `test` (56) ·
   `yarn tsx scripts/preview-views.ts`.
 
 ## Gotchas learned the hard way (don't rediscover)
