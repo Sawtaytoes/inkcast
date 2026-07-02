@@ -7,6 +7,9 @@ proposing a change; a settled decision here overrides default instinct.
 
 | Date | Decision | Status |
 | --- | --- | --- |
+| 2026-07-02 | [Now-playing views fall back to a per-device idle view when nothing plays](2026-07-02-now-playing-idle-fallback.md) | Accepted |
+| 2026-07-02 | [Photo-frame face awareness shifts the crop; it never zooms in on faces](2026-07-02-face-crop-shifts-never-zooms.md) | Accepted |
+| 2026-07-02 | [Now-playing layouts put the track title first, above the artist](2026-07-02-title-above-artist.md) | Accepted |
 | 2026-07-01 | [Docker images publish to GHCR via GitHub Actions, not the homelab registry](2026-07-01-images-publish-to-ghcr-not-homelab-registry.md) | Accepted |
 | 2026-07-01 | [Now-playing data comes from HA `media_player`, not Music Assistant](2026-07-01-now-playing-reads-ha-media-player.md) | Accepted |
 | 2026-07-01 | [Production runs an esbuild bundle with node, never tsx](2026-07-01-esbuild-bundle-not-tsx-in-prod.md) | Accepted |
