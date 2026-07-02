@@ -34,9 +34,6 @@ const GET_STATES_MESSAGE_ID = 2
 const SUBSCRIBE_EVENTS_MESSAGE_ID = 3
 const RECONNECT_DELAY_MILLISECONDS = 5_000
 
-/** The integration whose players the follow mode tracks. */
-const MUSIC_ASSISTANT_PLATFORM = "music_assistant"
-
 /** `http(s)://host:8123` → `ws(s)://host:8123/api/websocket`. */
 const buildWebSocketUrl = (homeAssistantUrl: string) =>
   `${homeAssistantUrl.replace(/^http/, "ws").replace(/\/$/, "")}/api/websocket`
@@ -44,26 +41,30 @@ const buildWebSocketUrl = (homeAssistantUrl: string) =>
 /**
  * Streams entity states from Home Assistant over its WebSocket API:
  * authenticates with a long-lived access token, optionally discovers every
- * Music Assistant `media_player` from the entity registry (follow mode),
- * emits an initial snapshot (`get_states`), then every subsequent
- * `state_changed` of a watched entity. The connection retries forever with a
- * fixed delay, so a HA restart just pauses the stream instead of killing the
- * adapter.
+ * `media_player` belonging to the followed integrations from the entity
+ * registry (follow mode), emits an initial snapshot (`get_states`), then
+ * every subsequent `state_changed` of a watched entity. The connection
+ * retries forever with a fixed delay, so a HA restart just pauses the stream
+ * instead of killing the adapter.
  */
 export const observeHomeAssistantEntityStates = ({
   url,
   token,
   entityIds,
-  hasFollowAllMusicPlayers,
+  followedPlatforms,
 }: {
   url: string
   token: string
   /** Entities explicitly pinned by devices — always watched. */
   entityIds: readonly string[]
-  /** Also watch every Music Assistant `media_player` (registry lookup). */
-  hasFollowAllMusicPlayers: boolean
+  /**
+   * Integrations whose `media_player`s the follow mode tracks (registry
+   * lookup), e.g. music_assistant + plex. Empty = follow mode off.
+   */
+  followedPlatforms: readonly string[]
 }): Observable<HomeAssistantEntityState> => {
   const pinnedEntityIds = new Set(entityIds)
+  const followedPlatformSet = new Set(followedPlatforms)
 
   return new Observable<HomeAssistantEntityState>(
     (subscriber) => {
@@ -124,7 +125,7 @@ export const observeHomeAssistantEntityStates = ({
         } else if (message.type === "auth_ok") {
           // Follow mode needs the registry (for the entity → integration
           // mapping) before the snapshot can be filtered.
-          if (hasFollowAllMusicPlayers) {
+          if (followedPlatformSet.size > 0) {
             sendMessage({
               id: REGISTRY_MESSAGE_ID,
               type: "config/entity_registry/list",
@@ -142,15 +143,14 @@ export const observeHomeAssistantEntityStates = ({
           registryEntries
             .filter(
               (entry) =>
-                entry.platform ===
-                  MUSIC_ASSISTANT_PLATFORM &&
+                followedPlatformSet.has(entry.platform) &&
                 entry.entity_id.startsWith("media_player."),
             )
             .forEach((entry) => {
               followedEntityIds.add(entry.entity_id)
             })
           console.log(
-            `[inkcast] following ${followedEntityIds.size} Music Assistant player(s)`,
+            `[inkcast] following ${followedEntityIds.size} player(s) from: ${followedPlatforms.join(", ")}`,
           )
           requestStatesAndEvents()
         } else if (

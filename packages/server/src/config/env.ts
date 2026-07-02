@@ -48,6 +48,10 @@ const EnvSchema = z.object({
     z.string(),
     "",
   ),
+  HOME_ASSISTANT_FOLLOW_PLATFORMS: z._default(
+    z.string(),
+    "music_assistant,plex",
+  ),
 })
 
 /**
@@ -128,6 +132,8 @@ export type MqttConfig = {
 export type HomeAssistantConfig = {
   url: string
   token: string
+  /** Integrations whose players the follow mode tracks. */
+  followedPlatforms: readonly string[]
 }
 
 export type InkcastConfig = {
@@ -174,6 +180,10 @@ export const loadConfig = (
     homeAssistant: {
       url: parsed.HOME_ASSISTANT_URL,
       token: parsed.HOME_ASSISTANT_TOKEN,
+      followedPlatforms:
+        parsed.HOME_ASSISTANT_FOLLOW_PLATFORMS.split(",")
+          .map((platform) => platform.trim())
+          .filter((platform) => platform.length > 0),
     },
   }
 }

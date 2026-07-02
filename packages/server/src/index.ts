@@ -123,7 +123,7 @@ const main = async () => {
         ),
     ),
   )
-  const hasFollowAllMusicPlayers = config.devices.some(
+  const hasUnpinnedDevice = config.devices.some(
     (device) => !device.nowPlayingEntityId,
   )
   const hasNowPlayingAdapter = Boolean(
@@ -134,7 +134,9 @@ const main = async () => {
         homeAssistantUrl: config.homeAssistant.url,
         homeAssistantToken: config.homeAssistant.token,
         pinnedEntityIds,
-        hasFollowAllMusicPlayers,
+        followedPlatforms: hasUnpinnedDevice
+          ? config.homeAssistant.followedPlatforms
+          : [],
         viewDataStore,
         onNowPlayingChanged: (entityKey) => {
           pushDevicesShowingView({

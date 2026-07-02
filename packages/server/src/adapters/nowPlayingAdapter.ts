@@ -1,4 +1,5 @@
 import {
+  concatMap,
   debounceTime,
   distinctUntilChanged,
   filter,
@@ -9,6 +10,7 @@ import {
   scan,
   share,
 } from "rxjs"
+import { fetchArtworkDataUri } from "../homeAssistant/haArtwork.ts"
 import {
   type HomeAssistantEntityState,
   observeHomeAssistantEntityStates,
@@ -49,7 +51,9 @@ const readStringAttribute = ({
  * Maps one HA `media_player` state to the now-playing view's data. A player
  * that has track metadata but isn't `playing` renders as "Last Played"
  * (`isPlaying: false`); a player with no metadata at all (idle/off/
- * unavailable) renders the idle placeholder.
+ * unavailable) renders the idle placeholder. For video players (Plex) the
+ * series title stands in for the artist line, and `entity_picture` carries
+ * the album art / poster.
  */
 export const mapHomeAssistantStateToNowPlaying = (
   entityState: Pick<
@@ -65,6 +69,10 @@ export const mapHomeAssistantStateToNowPlaying = (
     readStringAttribute({
       attributes: entityState.attributes,
       key: "media_album_artist",
+    }) ||
+    readStringAttribute({
+      attributes: entityState.attributes,
+      key: "media_series_title",
     })
   const title = readStringAttribute({
     attributes: entityState.attributes,
@@ -75,10 +83,16 @@ export const mapHomeAssistantStateToNowPlaying = (
     return IDLE_NOW_PLAYING
   }
 
+  const artworkPath = readStringAttribute({
+    attributes: entityState.attributes,
+    key: "entity_picture",
+  })
+
   return {
     artist: artist || "—",
     title: title || "—",
     isPlaying: entityState.state === "playing",
+    ...(artworkPath ? { artworkPath } : {}),
   }
 }
 
@@ -162,14 +176,14 @@ export const createNowPlayingAdapter = ({
   homeAssistantUrl,
   homeAssistantToken,
   pinnedEntityIds,
-  hasFollowAllMusicPlayers,
+  followedPlatforms,
   viewDataStore,
   onNowPlayingChanged,
 }: {
   homeAssistantUrl: string
   homeAssistantToken: string
   pinnedEntityIds: readonly string[]
-  hasFollowAllMusicPlayers: boolean
+  followedPlatforms: readonly string[]
   viewDataStore: ViewDataStore
   onNowPlayingChanged: (entityKey: string) => void
 }) => {
@@ -177,7 +191,7 @@ export const createNowPlayingAdapter = ({
     url: homeAssistantUrl,
     token: homeAssistantToken,
     entityIds: pinnedEntityIds,
-    hasFollowAllMusicPlayers,
+    followedPlatforms,
   }).pipe(
     map(
       (entityState): NowPlayingUpdate => ({
@@ -232,16 +246,31 @@ export const createNowPlayingAdapter = ({
     debounceTime(DEBOUNCE_MILLISECONDS),
   )
 
-  const subscription = merge(
-    pinnedUpdates,
-    followedUpdates,
-  ).subscribe(({ entityKey, data }) => {
-    viewDataStore.setNowPlaying({
-      entityId: entityKey,
-      data,
+  const subscription = merge(pinnedUpdates, followedUpdates)
+    .pipe(
+      // Resolve the artwork AFTER dedupe/debounce so each track change costs
+      // at most one HA fetch (cached by picture path).
+      concatMap(async ({ entityKey, data }) => ({
+        entityKey,
+        data: {
+          ...data,
+          artworkDataUri: data.artworkPath
+            ? await fetchArtworkDataUri({
+                homeAssistantUrl,
+                homeAssistantToken,
+                picturePath: data.artworkPath,
+              })
+            : undefined,
+        },
+      })),
+    )
+    .subscribe(({ entityKey, data }) => {
+      viewDataStore.setNowPlaying({
+        entityId: entityKey,
+        data,
+      })
+      onNowPlayingChanged(entityKey)
     })
-    onNowPlayingChanged(entityKey)
-  })
 
   return {
     close: () => {
