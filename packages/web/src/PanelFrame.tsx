@@ -1,4 +1,4 @@
-import { NowPlayingCard } from "@inkcast/views/NowPlayingCard"
+import { NowPlayingEditorial } from "@inkcast/views/NowPlayingEditorial"
 import type { CSSProperties } from "react"
 
 /**
@@ -57,7 +57,7 @@ export const PanelFrame = ({
 
       <div style={scaledStyle}>
         <div style={transformStyle}>
-          <NowPlayingCard
+          <NowPlayingEditorial
             width={width}
             height={height}
             colourMode={colourMode}

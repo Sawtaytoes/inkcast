@@ -18,8 +18,11 @@ import { startClockTicker } from "./schedulers/clockTicker.ts"
 import { createDeviceStore } from "./state/deviceStore.ts"
 import { createViewDataStore } from "./state/viewDataStore.ts"
 import {
+  getIsClockBearingView,
+  getIsNowPlayingView,
   getIsViewName,
   VIEW_NAMES,
+  type ViewName,
 } from "./views/registry.ts"
 
 /**
@@ -76,20 +79,21 @@ const main = async () => {
     baseTopic,
   })
 
-  /** Push every device currently showing `viewName`, without awaiting. */
+  /** Push every device whose active view matches, without awaiting. */
   const pushDevicesShowingView = ({
-    viewName,
+    getIsViewIncluded,
     entityKey,
   }: {
-    viewName: string
+    getIsViewIncluded: (viewName: ViewName) => boolean
     /** Pinned entity id, or the followed-player key for unpinned devices. */
     entityKey?: string
   }) => {
     config.devices
       .filter(
         (device) =>
-          deviceStore.getActiveView(device.id) ===
-            viewName &&
+          getIsViewIncluded(
+            deviceStore.getActiveView(device.id),
+          ) &&
           (entityKey === undefined ||
             (device.nowPlayingEntityId ??
               FOLLOWED_NOW_PLAYING_KEY) === entityKey),
@@ -140,17 +144,19 @@ const main = async () => {
         viewDataStore,
         onNowPlayingChanged: (entityKey) => {
           pushDevicesShowingView({
-            viewName: "now-playing",
+            getIsViewIncluded: getIsNowPlayingView,
             entityKey,
           })
         },
       })
     : null
 
-  // Keep clock panels on real time: re-push them each minute.
+  // Keep clock-bearing panels on real time: re-push them each minute.
   const clockTicker = startClockTicker({
     onMinuteTick: () => {
-      pushDevicesShowingView({ viewName: "clock" })
+      pushDevicesShowingView({
+        getIsViewIncluded: getIsClockBearingView,
+      })
     },
   })
 

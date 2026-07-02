@@ -24,15 +24,18 @@ export const fetchArtworkDataUri = async ({
     return cached
   }
 
+  // `entity_picture` is usually an HA-relative proxy path, but some
+  // integrations (Music Assistant) hand back an absolute URL.
+  const artworkUrl = picturePath.startsWith("http")
+    ? picturePath
+    : `${homeAssistantUrl.replace(/\/$/, "")}${picturePath}`
+
   try {
-    const response = await fetch(
-      `${homeAssistantUrl.replace(/\/$/, "")}${picturePath}`,
-      {
-        headers: {
-          Authorization: `Bearer ${homeAssistantToken}`,
-        },
+    const response = await fetch(artworkUrl, {
+      headers: {
+        Authorization: `Bearer ${homeAssistantToken}`,
       },
-    )
+    })
     if (!response.ok) {
       console.error(
         `[inkcast] artwork fetch failed (${response.status}) for ${picturePath}`,

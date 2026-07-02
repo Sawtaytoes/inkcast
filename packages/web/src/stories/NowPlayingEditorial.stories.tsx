@@ -1,4 +1,4 @@
-import { NowPlayingCard } from "@inkcast/views/NowPlayingCard"
+import { NowPlayingEditorial } from "@inkcast/views/NowPlayingEditorial"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 
 /**
@@ -7,8 +7,8 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
  * (in a browser) is what the Chromium engine gives the device, pre-dither.
  */
 const meta = {
-  title: "Views/NowPlayingCard",
-  component: NowPlayingCard,
+  title: "Views/NowPlayingEditorial",
+  component: NowPlayingEditorial,
   argTypes: {
     colourMode: {
       control: "inline-radio",
@@ -16,7 +16,7 @@ const meta = {
     },
     isPlaying: { control: "boolean" },
   },
-} satisfies Meta<typeof NowPlayingCard>
+} satisfies Meta<typeof NowPlayingEditorial>
 
 export default meta
 type Story = StoryObj<typeof meta>

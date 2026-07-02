@@ -27,8 +27,10 @@ describe("buildOpenApiDocument", () => {
       properties: { view: { enum: string[] } }
     }
     expect(schema.properties.view.enum).toEqual([
-      "now-playing",
-      "clock",
+      "Now Playing (Dashboard)",
+      "Now Playing (Editorial)",
+      "Now Playing (Poster)",
+      "Clock",
     ])
   })
 

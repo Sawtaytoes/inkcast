@@ -51,10 +51,7 @@ export const createChromiumEngine = async (): Promise<
   // against untrusted web content; this engine only ever loads our own SSR'd
   // markup, so dropping it is safe.
   const browser: Browser = await chromium.launch({
-    args: [
-      "--no-sandbox",
-      "--disable-dev-shm-usage",
-    ],
+    args: ["--no-sandbox", "--disable-dev-shm-usage"],
   })
 
   const render = async ({

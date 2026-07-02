@@ -15,7 +15,7 @@ export type DeviceStore = {
 
 export const createDeviceStore = ({
   deviceIds,
-  defaultView = "now-playing",
+  defaultView = "Now Playing (Dashboard)",
 }: {
   deviceIds: readonly string[]
   defaultView?: ViewName

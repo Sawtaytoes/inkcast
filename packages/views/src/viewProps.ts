@@ -10,3 +10,12 @@ export type PanelViewProps = {
   height: number
   colourMode: ViewColourMode
 }
+
+/** The data every now-playing view variant renders. */
+export type NowPlayingViewProps = PanelViewProps & {
+  artist: string
+  title: string
+  isPlaying: boolean
+  /** Album art / Plex poster as a data: URI, pre-fetched server-side. */
+  artworkDataUri?: string
+}

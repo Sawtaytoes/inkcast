@@ -45,7 +45,7 @@ describe("buildAvailabilityTopic", () => {
 describe("buildDiscoveryMessages", () => {
   const messages = buildDiscoveryMessages({
     device: PHAT_DEVICE,
-    viewNames: ["now-playing", "clock"],
+    viewNames: ["Now Playing (Dashboard)", "Clock"],
   })
 
   test("emits image, select, button, and sensor entities", () => {
@@ -88,15 +88,15 @@ describe("buildDiscoveryMessages", () => {
     )
 
     expect(selectMessage?.payload.options).toEqual([
-      "now-playing",
-      "clock",
+      "Now Playing (Dashboard)",
+      "Clock",
     ])
   })
 
   test("respects a custom discovery prefix + node id", () => {
     const custom = buildDiscoveryMessages({
       device: PHAT_DEVICE,
-      viewNames: ["clock"],
+      viewNames: ["Clock"],
       config: { discoveryPrefix: "ha", nodeId: "ink" },
     })
 

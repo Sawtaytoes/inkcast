@@ -3,7 +3,7 @@ import {
   PHAT_DEVICE,
 } from "@inkcast/core/devices/device"
 import type { Palette } from "@inkcast/core/panels/palette"
-import { NowPlayingCard } from "@inkcast/views/NowPlayingCard"
+import { NowPlayingEditorial } from "@inkcast/views/NowPlayingEditorial"
 import { createElement } from "react"
 import sharp from "sharp"
 
@@ -53,7 +53,7 @@ export const buildNowPlayingElement = ({
   height: number
   colourMode: "mono" | "e6"
 }) =>
-  createElement(NowPlayingCard, {
+  createElement(NowPlayingEditorial, {
     width,
     height,
     colourMode,
