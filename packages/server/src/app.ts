@@ -25,6 +25,9 @@ export const createApp = ({
 }) => {
   const app = new Hono()
 
+  // Bare domain → the interactive API docs (otherwise "/" is a bare 404).
+  app.get("/", (context) => context.redirect("/docs"))
+
   app.get("/health", (context) =>
     context.json({ status: "ok", views: VIEW_NAMES }),
   )

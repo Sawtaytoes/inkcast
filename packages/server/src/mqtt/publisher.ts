@@ -67,11 +67,32 @@ export const createMqttPublisher = async ({
     },
   })
 
-  await client.publishAsync(availabilityTopic, "online", {
-    retain: true,
-    qos: 1,
-  })
+  const publishOnline = () =>
+    client.publishAsync(availabilityTopic, "online", {
+      retain: true,
+      qos: 1,
+    })
+
+  await publishOnline()
   console.log(`[mqtt] connected to ${config.url}`)
+
+  // Availability heartbeat: another instance shutting down (or a stale LWT)
+  // can overwrite the retained availability with "offline" even though this
+  // server is alive and pushing — HA then ignores every push. Republishing
+  // "online" each minute heals that within one interval.
+  const heartbeatInterval = setInterval(() => {
+    publishOnline().catch((error) => {
+      console.error(
+        "[mqtt] availability heartbeat failed",
+        error,
+      )
+    })
+  }, 60_000)
+
+  // mqtt.js auto-reconnects; re-assert availability on every reconnect.
+  client.on("connect", () => {
+    publishOnline().catch(() => {})
+  })
 
   return {
     isEnabled: true,
@@ -95,6 +116,7 @@ export const createMqttPublisher = async ({
       await client.subscribeAsync(topics, { qos: 1 })
     },
     close: async () => {
+      clearInterval(heartbeatInterval)
       await client.publishAsync(
         availabilityTopic,
         "offline",

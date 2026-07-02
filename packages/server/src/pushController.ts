@@ -69,6 +69,9 @@ export const createPushController = ({
 
     const topics = buildDeviceTopics({ baseTopic, device })
 
+    console.log(
+      `[inkcast] push ${deviceId} (${deviceStore.getActiveView(deviceId)}, ${image.length} bytes)`,
+    )
     await publisher.publish({
       topic: topics.image,
       payload: image,
