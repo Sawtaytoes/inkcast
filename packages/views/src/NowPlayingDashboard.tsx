@@ -3,19 +3,27 @@ import type { CSSProperties } from "react"
 import type { NowPlayingViewProps } from "./viewProps.ts"
 import {
   buildPanelRootStyle,
+  fitFontSize,
   getAccentColour,
 } from "./viewStyles.ts"
 
 /**
  * Now-playing view, dashboard variant.
  *
+ * The track title is the visual anchor: it comes first (big and bold), with
+ * the artist beneath it and the album third. The artist line is hidden when
+ * it is empty or the "—" placeholder (YouTube Music streams often carry no
+ * artist). Long lines shrink-to-fit via `fitFontSize` before the ellipsis
+ * truncation kicks in.
+ *
  * Large panels: a play-state glyph + banner, the clock in the top-right
- * corner, album art beside the artist/title/album block, and the date in a
+ * corner, album art beside the title/artist/album block, and the date in a
  * footer strip. Small panels (≤200px tall) drop the banner row entirely —
- * the space goes to the track text (artist/title/album beside the art) and
- * the date + time share one footer line in compact forms ("07-01W",
- * "11:50p"), which the server pre-formats. Inline styles + flexbox only
- * (Satori-safe).
+ * the space goes to the track text beside the art (nudged optically high so
+ * the layout isn't bottom-heavy), small text is bold so it survives 1-bit
+ * dithering, and the date + time share one footer line hugging the bottom
+ * ("07-01W", "11:50p"), which the server pre-formats. Inline styles +
+ * flexbox only (Satori-safe).
  */
 export type NowPlayingDashboardProps =
   NowPlayingViewProps & {
@@ -24,6 +32,8 @@ export type NowPlayingDashboardProps =
   }
 
 const COMPACT_PANEL_MAX_HEIGHT = 200
+
+const ARTIST_PLACEHOLDER = "—"
 
 export const NowPlayingDashboard = ({
   width,
@@ -43,16 +53,18 @@ export const NowPlayingDashboard = ({
   })
   const hasArtwork = artworkDataUri !== undefined
   const isCompactPanel = height <= COMPACT_PANEL_MAX_HEIGHT
+  const trimmedArtist = artist.trim()
+  const hasVisibleArtist =
+    trimmedArtist !== "" &&
+    trimmedArtist !== ARTIST_PLACEHOLDER
 
   const bannerFontSize = Math.round(height * 0.08)
   const timeFontSize = Math.round(height * 0.12)
-  const artistFontSize = Math.round(
-    height * (isCompactPanel ? 0.16 : 0.2),
-  )
-  const titleFontSize = Math.round(
+  const baseTitleFontSize = Math.round(height * 0.16)
+  const baseArtistFontSize = Math.round(
     height * (isCompactPanel ? 0.13 : 0.14),
   )
-  const albumFontSize = Math.round(
+  const baseAlbumFontSize = Math.round(
     height * (isCompactPanel ? 0.11 : 0.1),
   )
   const dateFontSize = Math.round(
@@ -68,10 +80,40 @@ export const NowPlayingDashboard = ({
           ? 0.6
           : 0.44),
   )
+  const artworkToTextGap = Math.round(height * 0.06)
   const solidLineThickness = Math.max(
     2,
     Math.round(height * 0.008),
   )
+
+  const trackTextAvailableWidth =
+    width -
+    padding * 2 -
+    (hasArtwork ? artworkSide + artworkToTextGap : 0)
+
+  const titleFontSize = fitFontSize({
+    baseFontSize: baseTitleFontSize,
+    availableWidth: trackTextAvailableWidth,
+    text: title,
+  })
+  // The title is the anchor: when a long title shrinks below the artist's
+  // base size, the artist/album cap below it so the hierarchy never inverts.
+  const artistFontSize = fitFontSize({
+    baseFontSize: Math.min(
+      baseArtistFontSize,
+      Math.round(titleFontSize * 0.85),
+    ),
+    availableWidth: trackTextAvailableWidth,
+    text: artist,
+  })
+  const albumFontSize = fitFontSize({
+    baseFontSize: Math.min(
+      baseAlbumFontSize,
+      Math.round(titleFontSize * 0.7),
+    ),
+    availableWidth: trackTextAvailableWidth,
+    text: album ?? "",
+  })
 
   const glyphSize = Math.round(height * 0.08)
   const pauseBarWidth = Math.max(
@@ -146,6 +188,11 @@ export const NowPlayingDashboard = ({
     alignItems: "center",
     flexGrow: 1,
     minWidth: 0,
+    // On the compact panel the centered body reads bottom-heavy next to the
+    // footer strip, so bias the optical centre upward a touch.
+    paddingBottom: isCompactPanel
+      ? Math.round(height * 0.06)
+      : 0,
   }
 
   const artworkFrameStyle: CSSProperties = {
@@ -168,7 +215,7 @@ export const NowPlayingDashboard = ({
     justifyContent: "center",
     flexGrow: 1,
     minWidth: 0,
-    marginLeft: hasArtwork ? Math.round(height * 0.06) : 0,
+    marginLeft: hasArtwork ? artworkToTextGap : 0,
   }
 
   const truncatingLineStyle: CSSProperties = {
@@ -179,16 +226,18 @@ export const NowPlayingDashboard = ({
     textOverflow: "ellipsis",
   }
 
-  const artistStyle: CSSProperties = {
+  const titleStyle: CSSProperties = {
     ...truncatingLineStyle,
-    fontSize: artistFontSize,
+    fontSize: titleFontSize,
     fontWeight: 700,
     lineHeight: 1.05,
   }
 
-  const titleStyle: CSSProperties = {
+  const artistStyle: CSSProperties = {
     ...truncatingLineStyle,
-    fontSize: titleFontSize,
+    fontSize: artistFontSize,
+    // Small text dithers away on the 1-bit panel unless it is bold.
+    fontWeight: isCompactPanel ? 700 : 400,
     lineHeight: 1.1,
     marginTop: Math.round(height * 0.02),
   }
@@ -196,6 +245,7 @@ export const NowPlayingDashboard = ({
   const albumStyle: CSSProperties = {
     ...truncatingLineStyle,
     fontSize: albumFontSize,
+    fontWeight: isCompactPanel ? 700 : 400,
     lineHeight: 1.1,
     marginTop: Math.round(height * 0.015),
   }
@@ -211,7 +261,9 @@ export const NowPlayingDashboard = ({
     display: "flex",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: Math.round(height * 0.03),
+    marginTop: Math.round(
+      height * (isCompactPanel ? 0.02 : 0.03),
+    ),
   }
 
   const dateStyle: CSSProperties = {
@@ -255,8 +307,10 @@ export const NowPlayingDashboard = ({
         ) : null}
 
         <div style={trackColumnStyle}>
-          <div style={artistStyle}>{artist}</div>
           <div style={titleStyle}>{title}</div>
+          {hasVisibleArtist ? (
+            <div style={artistStyle}>{artist}</div>
+          ) : null}
           {album ? (
             <div style={albumStyle}>{album}</div>
           ) : null}

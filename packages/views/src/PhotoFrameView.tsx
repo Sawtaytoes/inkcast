@@ -43,8 +43,8 @@ export const PhotoFrameView = ({
       <div style={rootStyle}>
         <div style={messageStyle}>Photo Frame</div>
         <div style={hintStyle}>
-          Set the device's "Photo Frame People" in Home
-          Assistant
+          Set the device's "Photo Frame: People" or "Photo
+          Frame: Query" in Home Assistant
         </div>
       </div>
     )
