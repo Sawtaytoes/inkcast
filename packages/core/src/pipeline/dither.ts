@@ -245,15 +245,17 @@ export const ditherToPanel = async ({
         hasOrderedBias: algorithm === "ordered",
       })
 
-  return sharp(ditheredBuffer, {
-    raw: { width, height, channels: 4 },
-  })
-    .rotate(rotation)
-    // Emit a plain RGB PNG, NOT an indexed-palette one. A palette PNG's index
-    // order is content-dependent, and a device that reads palette indices
-    // directly (the Inky library) then swaps black/white between frames —
-    // intermittent colour inversion on the panel. RGB is unambiguous.
-    .removeAlpha()
-    .png()
-    .toBuffer()
+  return (
+    sharp(ditheredBuffer, {
+      raw: { width, height, channels: 4 },
+    })
+      .rotate(rotation)
+      // Emit a plain RGB PNG, NOT an indexed-palette one. A palette PNG's index
+      // order is content-dependent, and a device that reads palette indices
+      // directly (the Inky library) then swaps black/white between frames —
+      // intermittent colour inversion on the panel. RGB is unambiguous.
+      .removeAlpha()
+      .png()
+      .toBuffer()
+  )
 }
