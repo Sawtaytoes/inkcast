@@ -42,9 +42,12 @@ const EnvSchema = z.object({
   ),
   MQTT_NODE_ID: z._default(z.string(), "inkcast"),
   MQTT_BASE_TOPIC: z._default(z.string(), "inkcast"),
-  HA_URL: z._default(z.string(), ""),
-  HA_TOKEN: z._default(z.string(), ""),
-  HA_NOW_PLAYING_ENTITY: z._default(z.string(), ""),
+  HOME_ASSISTANT_URL: z._default(z.string(), ""),
+  HOME_ASSISTANT_TOKEN: z._default(z.string(), ""),
+  HOME_ASSISTANT_NOW_PLAYING_ENTITY: z._default(
+    z.string(),
+    "",
+  ),
 })
 
 /**
@@ -122,7 +125,7 @@ export type MqttConfig = {
   baseTopic: string
 }
 
-export type HaConfig = {
+export type HomeAssistantConfig = {
   url: string
   token: string
 }
@@ -133,7 +136,7 @@ export type InkcastConfig = {
   renderEngine: "chromium" | "satori"
   devices: readonly ConfiguredDevice[]
   mqtt: MqttConfig
-  ha: HaConfig
+  homeAssistant: HomeAssistantConfig
 }
 
 /** Parse + validate configuration from `process.env`. Throws on bad input. */
@@ -145,9 +148,10 @@ export const loadConfig = (
     parsed.INKCAST_DEVICES_FILE,
   ).map((device) => ({
     ...device,
+    // No pinned entity anywhere = follow-the-active-player mode.
     nowPlayingEntityId:
       device.nowPlayingEntityId ||
-      parsed.HA_NOW_PLAYING_ENTITY ||
+      parsed.HOME_ASSISTANT_NOW_PLAYING_ENTITY ||
       undefined,
   }))
 
@@ -167,9 +171,9 @@ export const loadConfig = (
       nodeId: parsed.MQTT_NODE_ID,
       baseTopic: parsed.MQTT_BASE_TOPIC,
     },
-    ha: {
-      url: parsed.HA_URL,
-      token: parsed.HA_TOKEN,
+    homeAssistant: {
+      url: parsed.HOME_ASSISTANT_URL,
+      token: parsed.HOME_ASSISTANT_TOKEN,
     },
   }
 }

@@ -10,28 +10,32 @@ Inkcast (a self-hostable e-ink render/push platform) is **live end-to-end**: the
 server renders per-device views, dithers per panel, pushes PNGs over MQTT; Home
 Assistant auto-created the device entities via MQTT discovery, two-way control
 works, and the **pHAT now runs the Inkcast receiver** (Phase 3 pHAT done — the old
-fetcher is disabled-not-deleted). **Not yet done:** the maintainer still needs to
-add `HA_URL`/`HA_TOKEN`/`HA_NOW_PLAYING_ENTITY` to `.env` to turn the (built,
-verified) live now-playing adapter on, the Impression Pi still runs its old
-fetcher, and the server only runs on a dev machine (not yet a TrueNAS app).
+fetcher is disabled-not-deleted). The **now-playing view is LIVE** (HA
+WebSocket, follow-the-active-MA-player by default). **Not yet done:** the
+Impression Pi still runs its old fetcher, and the server only runs on a dev
+machine (not yet a TrueNAS app).
 
 ## ⭐ Next steps (start here — prioritized)
 
-1. **✅ DONE (2026-07-01): Now-playing data adapter (Phase 2).** The decision
-   went to **HA `media_player`** (see
+1. **✅ DONE (2026-07-01): Now-playing data adapter (Phase 2) — LIVE.** The
+   decision went to **HA `media_player`** (see
    `decisions/2026-07-01-now-playing-reads-ha-media-player.md`; MA-direct stays
-   a possible future addition). Built: HA WebSocket client
-   (`server/src/ha/haStates.ts`, native WebSocket, auto-reconnect) → RxJS
-   per-entity dedupe/debounce pipeline (`adapters/nowPlayingAdapter.ts`) →
-   view-data store → targeted re-push. Clock views also re-push each minute
-   with real time (process `TZ`). **To go live the maintainer must add to
-   `.env`: `HA_URL=http://homeassistant.octen:8123`, `HA_TOKEN=<long-lived
-   token from HA profile → Security>`, `HA_NOW_PLAYING_ENTITY=
-   media_player.kids_bedroom_mini`** (the Cast entity; its MA twin is
-   `..._mini_2` — both carry full metadata; per-device override =
-   `nowPlayingEntityId` in the devices file). Verified end-to-end against a
-   protocol-faithful fake HA WS server (auth → snapshot → debounced track
-   change → correct PNG on both panels, rotation + accent intact).
+   a possible future addition). Built + verified against the real HA: WebSocket
+   client (`server/src/homeAssistant/homeAssistantStates.ts`, the **`ws`
+   package — NOT Node's built-in WebSocket**, which drops HA's multi-MB
+   `get_states`/registry frames with an opaque error) → RxJS dedupe/debounce
+   pipeline (`adapters/nowPlayingAdapter.ts`) → view-data store → targeted
+   re-push. Clock views also re-push each minute with real time (process `TZ`).
+   Env vars are `HOME_ASSISTANT_URL` / `HOME_ASSISTANT_TOKEN` (maintainer
+   renamed from `HA_*` — "HA" is ambiguous with High Availability; both are in
+   the maintainer's `.env` already). **Default = follow mode**: with no entity
+   configured, the server discovers every Music Assistant `media_player` from
+   the entity registry (54 found live) and shows whichever most recently
+   started playing, switching players automatically (sticky "Last Played" when
+   everything stops) — matching the old `ma_nowplaying_bridge.py`. Pin one
+   entity globally with `HOME_ASSISTANT_NOW_PLAYING_ENTITY` or per device with
+   `nowPlayingEntityId` in the devices file. Also fixed: the server now finds
+   the root `.env` when started via `yarn dev:server` (cwd `packages/server`).
 2. **Impression receiver (Phase 3 cont.).** Same `device-client` receiver on
    `inky-spectra`, with `INKCAST_IMAGE_TOPIC=inkcast/inky-impression/image`. Then
    build the **Immich photo-frame view** (port `home-displays/eink-clients/

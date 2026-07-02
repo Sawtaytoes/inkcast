@@ -1,12 +1,16 @@
+import { resolve } from "node:path"
 import { serve } from "@hono/node-server"
-import { createNowPlayingAdapter } from "./adapters/nowPlayingAdapter.ts"
+import {
+  createNowPlayingAdapter,
+  FOLLOWED_NOW_PLAYING_KEY,
+} from "./adapters/nowPlayingAdapter.ts"
 import { createApp } from "./app.ts"
 import { loadConfig } from "./config/env.ts"
 import {
   buildAvailabilityTopic,
   buildDeviceTopics,
   buildDiscoveryMessages,
-} from "./ha/discovery.ts"
+} from "./homeAssistant/discovery.ts"
 import { createMqttPublisher } from "./mqtt/publisher.ts"
 import { createPushController } from "./pushController.ts"
 import { createRenderService } from "./render/renderService.ts"
@@ -23,12 +27,31 @@ import {
  * every device to Home Assistant via MQTT discovery, subscribes to the HA
  * command topics, pushes an initial frame per device, and serves the HTTP API.
  */
+/**
+ * Load a local `.env` if present (gitignored) — from the working directory
+ * or the repo root (so `yarn workspace @inkcast/server dev`, whose cwd is
+ * `packages/server`, finds it too). In containers, env is usually passed
+ * directly, so a missing file is fine.
+ */
+const loadEnvironmentFile = () => {
+  const candidatePaths = [
+    resolve(process.cwd(), ".env"),
+    // packages/server/{src,dist}/index.* → the repo root.
+    resolve(import.meta.dirname, "../../../.env"),
+  ]
+
+  candidatePaths.some((candidatePath) => {
+    try {
+      process.loadEnvFile(candidatePath)
+      return true
+    } catch {
+      return false
+    }
+  })
+}
+
 const main = async () => {
-  // Load a local .env if present (gitignored). In containers, env is usually
-  // passed directly, so a missing file is fine.
-  try {
-    process.loadEnvFile()
-  } catch {}
+  loadEnvironmentFile()
 
   const config = loadConfig()
   const { baseTopic } = config.mqtt
@@ -56,18 +79,20 @@ const main = async () => {
   /** Push every device currently showing `viewName`, without awaiting. */
   const pushDevicesShowingView = ({
     viewName,
-    entityId,
+    entityKey,
   }: {
     viewName: string
-    entityId?: string
+    /** Pinned entity id, or the followed-player key for unpinned devices. */
+    entityKey?: string
   }) => {
     config.devices
       .filter(
         (device) =>
           deviceStore.getActiveView(device.id) ===
             viewName &&
-          (entityId === undefined ||
-            device.nowPlayingEntityId === entityId),
+          (entityKey === undefined ||
+            (device.nowPlayingEntityId ??
+              FOLLOWED_NOW_PLAYING_KEY) === entityKey),
       )
       .forEach((device) => {
         pushController
@@ -81,10 +106,12 @@ const main = async () => {
       })
   }
 
-  // Phase-2 now-playing adapter: stream the watched media_player entities
-  // from HA and re-push affected devices on change. Disabled unless HA_URL +
-  // HA_TOKEN are set and at least one device is bound to an entity.
-  const watchedEntityIds = Array.from(
+  // Phase-2 now-playing adapter: stream media_player entities from Home
+  // Assistant and re-push affected devices on change. Devices with a pinned
+  // nowPlayingEntityId watch that entity; devices without one follow the
+  // most recently active Music Assistant player. Disabled unless
+  // HOME_ASSISTANT_URL + HOME_ASSISTANT_TOKEN are set.
+  const pinnedEntityIds = Array.from(
     new Set(
       config.devices
         .map((device) => device.nowPlayingEntityId)
@@ -96,21 +123,23 @@ const main = async () => {
         ),
     ),
   )
+  const hasFollowAllMusicPlayers = config.devices.some(
+    (device) => !device.nowPlayingEntityId,
+  )
   const hasNowPlayingAdapter = Boolean(
-    config.ha.url &&
-      config.ha.token &&
-      watchedEntityIds.length > 0,
+    config.homeAssistant.url && config.homeAssistant.token,
   )
   const nowPlayingAdapter = hasNowPlayingAdapter
     ? createNowPlayingAdapter({
-        haUrl: config.ha.url,
-        haToken: config.ha.token,
-        entityIds: watchedEntityIds,
+        homeAssistantUrl: config.homeAssistant.url,
+        homeAssistantToken: config.homeAssistant.token,
+        pinnedEntityIds,
+        hasFollowAllMusicPlayers,
         viewDataStore,
-        onNowPlayingChanged: (entityId) => {
+        onNowPlayingChanged: (entityKey) => {
           pushDevicesShowingView({
             viewName: "now-playing",
-            entityId,
+            entityKey,
           })
         },
       })

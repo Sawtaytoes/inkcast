@@ -924,6 +924,7 @@ __metadata:
     "@scalar/hono-api-reference": "npm:^0.11.7"
     "@types/node": "npm:^26.1.0"
     "@types/react": "npm:^19.2.17"
+    "@types/ws": "npm:^8.18.1"
     hono: "npm:^4.12.27"
     mqtt: "npm:^5.15.1"
     react: "npm:^19.2.7"
@@ -931,6 +932,7 @@ __metadata:
     tsx: "npm:^4.22.4"
     typescript: "npm:^6.0.3"
     vitest: "npm:^4.1.9"
+    ws: "npm:^8.21.0"
     zod: "npm:^4.4.3"
   languageName: unknown
   linkType: soft
@@ -6490,7 +6492,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ws@npm:^8.18.0, ws@npm:^8.18.3":
+"ws@npm:^8.18.0, ws@npm:^8.18.3, ws@npm:^8.21.0":
   version: 8.21.0
   resolution: "ws@npm:8.21.0"
   peerDependencies:

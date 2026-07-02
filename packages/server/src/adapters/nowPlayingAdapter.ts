@@ -1,14 +1,18 @@
 import {
   debounceTime,
   distinctUntilChanged,
+  filter,
   groupBy,
   map,
+  merge,
   mergeMap,
+  scan,
+  share,
 } from "rxjs"
 import {
-  type HaEntityState,
-  observeHaEntityStates,
-} from "../ha/haStates.ts"
+  type HomeAssistantEntityState,
+  observeHomeAssistantEntityStates,
+} from "../homeAssistant/homeAssistantStates.ts"
 import type {
   NowPlayingData,
   ViewDataStore,
@@ -20,6 +24,13 @@ export const IDLE_NOW_PLAYING: NowPlayingData = {
   title: "Nothing playing",
   isPlaying: false,
 }
+
+/**
+ * The view-data-store key for the follow-the-active-player aggregate: the
+ * most recently *playing* Music Assistant player wins, and devices with no
+ * pinned `nowPlayingEntityId` read this key.
+ */
+export const FOLLOWED_NOW_PLAYING_KEY = "__followed__"
 
 const DEBOUNCE_MILLISECONDS = 1_000
 
@@ -40,8 +51,11 @@ const readStringAttribute = ({
  * (`isPlaying: false`); a player with no metadata at all (idle/off/
  * unavailable) renders the idle placeholder.
  */
-export const mapHaStateToNowPlaying = (
-  entityState: HaEntityState,
+export const mapHomeAssistantStateToNowPlaying = (
+  entityState: Pick<
+    HomeAssistantEntityState,
+    "state" | "attributes"
+  >,
 ): NowPlayingData => {
   const artist =
     readStringAttribute({
@@ -68,52 +82,166 @@ export const mapHaStateToNowPlaying = (
   }
 }
 
+type NowPlayingUpdate = {
+  entityId: string
+  data: NowPlayingData
+  isFollowCandidate: boolean
+}
+
+type FollowAccumulator = {
+  dataByEntityId: ReadonlyMap<string, NowPlayingData>
+  currentEntityId: string | null
+}
+
+const EMPTY_FOLLOW_ACCUMULATOR: FollowAccumulator = {
+  dataByEntityId: new Map(),
+  currentEntityId: null,
+}
+
 /**
- * The Phase-2 now-playing data adapter: subscribes to the watched
- * `media_player` entities over the HA WebSocket, and whenever an entity's
- * now-playing data actually changes (deduped, then debounced so rapid
- * skip-through doesn't thrash the e-ink panels), writes it to the view-data
- * store and notifies the caller so affected devices re-render.
+ * Picks which player the follow mode shows after an update: a player that is
+ * actively playing always takes over; if the current player stops and another
+ * is still playing, that one takes over; otherwise the current player stays
+ * (sticky, so the panel keeps showing "Last Played" instead of blanking).
+ */
+export const reduceFollowedPlayer = (
+  accumulator: FollowAccumulator,
+  update: NowPlayingUpdate,
+): FollowAccumulator => {
+  const dataByEntityId = new Map(
+    accumulator.dataByEntityId,
+  ).set(update.entityId, update.data)
+
+  if (update.data.isPlaying) {
+    return {
+      dataByEntityId,
+      currentEntityId: update.entityId,
+    }
+  }
+
+  const hasCurrentStopped =
+    update.entityId === accumulator.currentEntityId
+  const otherPlayingEntityId = Array.from(
+    dataByEntityId.entries(),
+  )
+    .filter(
+      ([entityId, data]) =>
+        data.isPlaying && entityId !== update.entityId,
+    )
+    .map(([entityId]) => entityId)
+    .at(0)
+
+  if (hasCurrentStopped && otherPlayingEntityId) {
+    return {
+      dataByEntityId,
+      currentEntityId: otherPlayingEntityId,
+    }
+  }
+
+  return {
+    dataByEntityId,
+    // With nothing playing yet, adopt the first player that has metadata so
+    // the panel shows "Last Played" rather than the idle placeholder.
+    currentEntityId:
+      accumulator.currentEntityId ??
+      (update.data !== IDLE_NOW_PLAYING
+        ? update.entityId
+        : null),
+  }
+}
+
+/**
+ * The Phase-2 now-playing data adapter: streams `media_player` states over
+ * the HA WebSocket, and whenever a pinned entity's data — or the
+ * follow-the-active-player aggregate — actually changes (deduped, then
+ * debounced so rapid skip-through doesn't thrash the e-ink panels), writes it
+ * to the view-data store and notifies the caller so affected devices
+ * re-render.
  */
 export const createNowPlayingAdapter = ({
-  haUrl,
-  haToken,
-  entityIds,
+  homeAssistantUrl,
+  homeAssistantToken,
+  pinnedEntityIds,
+  hasFollowAllMusicPlayers,
   viewDataStore,
   onNowPlayingChanged,
 }: {
-  haUrl: string
-  haToken: string
-  entityIds: readonly string[]
+  homeAssistantUrl: string
+  homeAssistantToken: string
+  pinnedEntityIds: readonly string[]
+  hasFollowAllMusicPlayers: boolean
   viewDataStore: ViewDataStore
-  onNowPlayingChanged: (entityId: string) => void
+  onNowPlayingChanged: (entityKey: string) => void
 }) => {
-  const subscription = observeHaEntityStates({
-    url: haUrl,
-    token: haToken,
-    entityIds,
-  })
-    .pipe(
-      map((entityState) => ({
+  const updates = observeHomeAssistantEntityStates({
+    url: homeAssistantUrl,
+    token: homeAssistantToken,
+    entityIds: pinnedEntityIds,
+    hasFollowAllMusicPlayers,
+  }).pipe(
+    map(
+      (entityState): NowPlayingUpdate => ({
         entityId: entityState.entityId,
-        data: mapHaStateToNowPlaying(entityState),
-      })),
-      groupBy((update) => update.entityId),
-      mergeMap((entityUpdates) =>
-        entityUpdates.pipe(
-          distinctUntilChanged(
-            (previous, current) =>
-              JSON.stringify(previous.data) ===
-              JSON.stringify(current.data),
-          ),
-          debounceTime(DEBOUNCE_MILLISECONDS),
+        data: mapHomeAssistantStateToNowPlaying(
+          entityState,
         ),
+        isFollowCandidate: entityState.isFollowCandidate,
+      }),
+    ),
+    share(),
+  )
+
+  const pinnedEntityIdSet = new Set(pinnedEntityIds)
+  const pinnedUpdates = updates.pipe(
+    filter((update) =>
+      pinnedEntityIdSet.has(update.entityId),
+    ),
+    groupBy((update) => update.entityId),
+    mergeMap((entityUpdates) =>
+      entityUpdates.pipe(
+        map((update) => ({
+          entityKey: update.entityId,
+          data: update.data,
+        })),
+        distinctUntilChanged(
+          (previous, current) =>
+            JSON.stringify(previous.data) ===
+            JSON.stringify(current.data),
+        ),
+        debounceTime(DEBOUNCE_MILLISECONDS),
       ),
-    )
-    .subscribe(({ entityId, data }) => {
-      viewDataStore.setNowPlaying({ entityId, data })
-      onNowPlayingChanged(entityId)
+    ),
+  )
+
+  const followedUpdates = updates.pipe(
+    filter((update) => update.isFollowCandidate),
+    scan(reduceFollowedPlayer, EMPTY_FOLLOW_ACCUMULATOR),
+    map((accumulator) => ({
+      entityKey: FOLLOWED_NOW_PLAYING_KEY,
+      data: accumulator.currentEntityId
+        ? (accumulator.dataByEntityId.get(
+            accumulator.currentEntityId,
+          ) ?? IDLE_NOW_PLAYING)
+        : IDLE_NOW_PLAYING,
+    })),
+    distinctUntilChanged(
+      (previous, current) =>
+        JSON.stringify(previous.data) ===
+        JSON.stringify(current.data),
+    ),
+    debounceTime(DEBOUNCE_MILLISECONDS),
+  )
+
+  const subscription = merge(
+    pinnedUpdates,
+    followedUpdates,
+  ).subscribe(({ entityKey, data }) => {
+    viewDataStore.setNowPlaying({
+      entityId: entityKey,
+      data,
     })
+    onNowPlayingChanged(entityKey)
+  })
 
   return {
     close: () => {

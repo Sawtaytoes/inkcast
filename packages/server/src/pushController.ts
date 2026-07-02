@@ -1,5 +1,6 @@
+import { FOLLOWED_NOW_PLAYING_KEY } from "./adapters/nowPlayingAdapter.ts"
 import type { ConfiguredDevice } from "./config/env.ts"
-import { buildDeviceTopics } from "./ha/discovery.ts"
+import { buildDeviceTopics } from "./homeAssistant/discovery.ts"
 import type { MqttPublisher } from "./mqtt/publisher.ts"
 import type { RenderService } from "./render/renderService.ts"
 import type { DeviceStore } from "./state/deviceStore.ts"
@@ -51,11 +52,11 @@ export const createPushController = ({
     return renderService.renderDevice({
       device,
       viewName: deviceStore.getActiveView(deviceId),
-      nowPlaying: device.nowPlayingEntityId
-        ? viewDataStore.getNowPlaying(
-            device.nowPlayingEntityId,
-          )
-        : undefined,
+      // Unpinned devices follow the household's active player.
+      nowPlaying: viewDataStore.getNowPlaying(
+        device.nowPlayingEntityId ??
+          FOLLOWED_NOW_PLAYING_KEY,
+      ),
     })
   }
 
