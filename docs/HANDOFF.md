@@ -37,11 +37,21 @@ Impression Pi still runs its old fetcher.
    entity globally with `HOME_ASSISTANT_NOW_PLAYING_ENTITY` or per device with
    `nowPlayingEntityId` in the devices file. Also fixed: the server now finds
    the root `.env` when started via `yarn dev:server` (cwd `packages/server`).
-2. **Impression receiver (Phase 3 cont.).** Same `device-client` receiver on
-   `inky-spectra`, with `INKCAST_IMAGE_TOPIC=inkcast/inky-impression/image`. Then
-   build the **Immich photo-frame view** (port `home-displays/eink-clients/
-   immich_impression_frame.py`: person-filtered album + face-aware 800×480 crop),
-   with kids' `personIds` / Immich URL+token from **config, not code**.
+2. **Impression receiver (Phase 3 cont.) — NOW THE TOP ITEM.** Same
+   `device-client` receiver on `inky-spectra`, with
+   `INKCAST_IMAGE_TOPIC=inkcast/inky-impression/image`; disable (don't
+   delete) `immich-impression-frame.service`. Everything the old fetcher did
+   is now server-side (see below), so the cutover is the only thing keeping
+   the physical Impression on the old stack. ✅ The **Immich photo-frame
+   view is DONE** (2026-07-02): `Photo Frame` view + adapter (face-aware
+   crop ported with tests, per-person pool UNION cached 6h, rotates every
+   `INKCAST_PHOTO_MINUTES`), people configured **per-device from HA** via
+   the `Photo Frame People` text entity (unique first names, full names, or
+   UUIDs; retained MQTT = persistence). Immich creds are env
+   (`IMMICH_URL`/`IMMICH_API_TOKEN` — the key was renamed "Inkcast" in
+   Immich, same value as the old Inker one, deployed to the TrueNAS app).
+   Verified live: kids configured from HA → face-cropped photo rendered +
+   pushed.
 3. **✅ DONE (2026-07-01): Server deployed as a TrueNAS app.** Pipeline: push
    to GitHub `master` → GitHub Actions (typecheck + tests, then Docker build)
    → **`ghcr.io/sawtaytoes/inkcast:latest`** (public package; NOT the homelab
@@ -55,8 +65,34 @@ Impression Pi still runs its old fetcher.
    TrueNAS → Apps → inkcast → Update (re-pulls `:latest`). The dev machine no
    longer needs to run the server.
 4. **On-panel dither A/B** + **font swap** (Atkinson Hyperlegible), and **web
-   config UI** (no settings UI yet — env/config-file only) for devices + the
-   Immich/now-playing criteria. **TLS 8883** (certs in `/ssl`) is optional.
+   config UI** (no settings UI yet — per-device config is HA entities;
+   server config is env). Maintainer note (2026-07-02): the hand-rolled
+   in-memory stores (`deviceStore`, `viewDataStore`, `deviceConfigStore`)
+   are a natural fit for **Jotai or Redux-Toolkit** if/when a refactor
+   happens — his suggestion, "something to keep in mind", not a mandate.
+   **TLS 8883** (certs in `/ssl`) is optional.
+
+### Done 2026-07-01→02 (second session, same day)
+
+- **Now-playing is LIVE from HA** (WS, `ws` npm package — Node's built-in
+  WebSocket chokes on HA's multi-MB frames). Follow mode tracks
+  `HOME_ASSISTANT_FOLLOW_PLATFORMS` (default `music_assistant,plex`) via the
+  entity registry; most-recently-playing player wins, sticky Last Played.
+- **Album art / Plex posters**: `entity_picture` fetched server-side →
+  data URI (cached), `media_series_title` fills the artist line for Plex.
+- **THREE now-playing view designs** (subagent-designed, user wants all
+  three to play with): `Now Playing (Dashboard)` (art + clock + date),
+  `(Editorial)` (record-sleeve type), `(Poster)` (Bauhaus ink blocks).
+  View names are now human-readable everywhere (select options = payloads).
+- **Photo Frame view** — see item 2 above.
+- **Deployed via GitHub Actions → GHCR → TrueNAS app** `inkcast` (16 CPU/
+  16GB, pull always). Ship a change: push master, wait for green, bounce the
+  app (`midclt call app.update` / UI Update). `/` now redirects to `/docs`.
+- **Availability heartbeat** (60s republish): a dying second instance's
+  retained `offline` no longer permanently kills HA availability (root
+  cause of the "device doesn't update" report — pushes were fine, HA was
+  ignoring them).
+- The dev machine no longer runs anything; panels update from TrueNAS.
 
 ### Done since first handoff (2026-07-01, same day)
 - Phase-3 **pHAT receiver** deployed (`device-client/`, commit 9d85d56): subscribes
