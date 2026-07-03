@@ -64,6 +64,12 @@ export const buildDeviceTopics = ({
     photoQueryState: `${base}/photo_query`,
     agendaCalendarsCommand: `${base}/agenda_calendars/set`,
     agendaCalendarsState: `${base}/agenda_calendars`,
+    weatherEntityCommand: `${base}/weather_entity/set`,
+    weatherEntityState: `${base}/weather_entity`,
+    photoIntervalCommand: `${base}/photo_interval/set`,
+    photoIntervalState: `${base}/photo_interval`,
+    photoRecencyCommand: `${base}/photo_recency/set`,
+    photoRecencyState: `${base}/photo_recency`,
     photoNextCommand: `${base}/photo_next/set`,
     photoPreviousCommand: `${base}/photo_previous/set`,
     ditherCommand: `${base}/dither/set`,
@@ -94,6 +100,15 @@ export const buildGlobalTopics = (
   /** Global default agenda calendars (comma-separated HA calendar entity ids). */
   agendaCalendarsCommand: `${baseTopic}/agenda_calendars/set`,
   agendaCalendarsState: `${baseTopic}/agenda_calendars`,
+  /** Global default HA `weather` entity id. */
+  weatherEntityCommand: `${baseTopic}/weather_entity/set`,
+  weatherEntityState: `${baseTopic}/weather_entity`,
+  /** Global default Photo Frame rotation interval, minutes. */
+  photoIntervalCommand: `${baseTopic}/photo_interval/set`,
+  photoIntervalState: `${baseTopic}/photo_interval`,
+  /** Global default Photo Frame recency half-life, days. */
+  photoRecencyCommand: `${baseTopic}/photo_recency/set`,
+  photoRecencyState: `${baseTopic}/photo_recency`,
 })
 
 /** The HA-facing colour-mode option strings (double as MQTT payloads). */
@@ -351,6 +366,61 @@ export const buildDiscoveryMessages = ({
       },
     },
     {
+      // HA `weather` entity feeding this device's Clock (Weather) view. Empty =
+      // use the global default on the Inkcast Server device.
+      topic: discoveryTopic("text", "weather_entity"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Weather: Entity",
+        unique_id: `inkcast_${device.id}_weather_entity`,
+        command_topic: topics.weatherEntityCommand,
+        state_topic: topics.weatherEntityState,
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
+      // Per-device Photo Frame rotation interval. 0 = inherit the global
+      // default on the Inkcast Server device (a number entity always carries a
+      // value, so 0 is the "unset/inherit" sentinel — 0 minutes is meaningless
+      // as a real interval).
+      topic: discoveryTopic("number", "photo_interval"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Photo Frame: Rotation minutes",
+        unique_id: `inkcast_${device.id}_photo_interval`,
+        command_topic: topics.photoIntervalCommand,
+        state_topic: topics.photoIntervalState,
+        min: 0,
+        max: 1440,
+        step: 1,
+        unit_of_measurement: "min",
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
+      // Per-device Photo Frame recency half-life. 0 = inherit the global
+      // default (same sentinel rationale as the rotation interval above).
+      topic: discoveryTopic("number", "photo_recency"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Photo Frame: Recency half-life days",
+        unique_id: `inkcast_${device.id}_photo_recency`,
+        command_topic: topics.photoRecencyCommand,
+        state_topic: topics.photoRecencyState,
+        min: 0,
+        max: 3650,
+        step: 1,
+        unit_of_measurement: "d",
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
       topic: discoveryTopic("button", "photo_next"),
       isRetained: true,
       payload: {
@@ -450,6 +520,60 @@ export const buildGlobalDiscoveryMessages = (
         unique_id: "inkcast_server_agenda_calendars",
         command_topic: topics.agendaCalendarsCommand,
         state_topic: topics.agendaCalendarsState,
+        entity_category: "config",
+        device: serverDeviceBlock,
+      },
+    },
+    {
+      // Global default weather entity — the HA `weather` entity every display's
+      // Clock (Weather) view uses unless it overrides with its own "Weather:
+      // Entity" text entity.
+      topic: `${discoveryPrefix}/text/${nodeId}/server_weather_entity/config`,
+      isRetained: true as const,
+      payload: {
+        ...availability,
+        name: "Weather: Entity",
+        unique_id: "inkcast_server_weather_entity",
+        command_topic: topics.weatherEntityCommand,
+        state_topic: topics.weatherEntityState,
+        entity_category: "config",
+        device: serverDeviceBlock,
+      },
+    },
+    {
+      // Global default Photo Frame rotation interval (minutes) — used by any
+      // display whose own "Photo Frame: Rotation minutes" is 0 (inherit).
+      topic: `${discoveryPrefix}/number/${nodeId}/server_photo_interval/config`,
+      isRetained: true as const,
+      payload: {
+        ...availability,
+        name: "Photo Frame: Rotation minutes",
+        unique_id: "inkcast_server_photo_interval",
+        command_topic: topics.photoIntervalCommand,
+        state_topic: topics.photoIntervalState,
+        min: 1,
+        max: 1440,
+        step: 1,
+        unit_of_measurement: "min",
+        entity_category: "config",
+        device: serverDeviceBlock,
+      },
+    },
+    {
+      // Global default Photo Frame recency half-life (days) — used by any
+      // display whose own "Photo Frame: Recency half-life days" is 0 (inherit).
+      topic: `${discoveryPrefix}/number/${nodeId}/server_photo_recency/config`,
+      isRetained: true as const,
+      payload: {
+        ...availability,
+        name: "Photo Frame: Recency half-life days",
+        unique_id: "inkcast_server_photo_recency",
+        command_topic: topics.photoRecencyCommand,
+        state_topic: topics.photoRecencyState,
+        min: 1,
+        max: 3650,
+        step: 1,
+        unit_of_measurement: "d",
         entity_category: "config",
         device: serverDeviceBlock,
       },

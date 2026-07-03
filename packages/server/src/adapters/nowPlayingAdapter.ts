@@ -7,6 +7,7 @@ import {
   map,
   merge,
   mergeMap,
+  Subject,
   scan,
   share,
 } from "rxjs"
@@ -240,7 +241,7 @@ export const createNowPlayingAdapter = ({
   homeAssistantToken,
   pinnedEntityIds,
   followedPlatforms,
-  weatherEntityId = "",
+  getWeatherEntityIds = () => [],
   viewDataStore,
   onNowPlayingChanged,
   onWeatherChanged = () => {},
@@ -249,26 +250,35 @@ export const createNowPlayingAdapter = ({
   homeAssistantToken: string
   pinnedEntityIds: readonly string[]
   followedPlatforms: readonly string[]
-  /** HA `weather` entity to stream for the clock views ("" = off). */
-  weatherEntityId?: string
+  /**
+   * The HA `weather` entity ids to stream for the clock views, resolved live
+   * (the union of every device's configured weather entity). Empty = off.
+   */
+  getWeatherEntityIds?: () => readonly string[]
   viewDataStore: ViewDataStore
   onNowPlayingChanged: (entityKey: string) => void
-  onWeatherChanged?: () => void
+  onWeatherChanged?: (weatherEntityId: string) => void
 }) => {
+  // Re-pull the HA snapshot after the weather set grows so a just-configured
+  // weather entity shows its current value without waiting for its next change.
+  const weatherRefreshSubject = new Subject<void>()
+
   const entityStates = observeHomeAssistantEntityStates({
     url: homeAssistantUrl,
     token: homeAssistantToken,
-    entityIds: weatherEntityId
-      ? pinnedEntityIds.concat(weatherEntityId)
-      : pinnedEntityIds,
+    entityIds: pinnedEntityIds,
     followedPlatforms,
+    getExtraWatchedEntityIds: getWeatherEntityIds,
+    refreshSignal: weatherRefreshSubject,
   }).pipe(share())
 
   const updates = entityStates
     .pipe(
       filter(
         (entityState) =>
-          entityState.entityId !== weatherEntityId,
+          !getWeatherEntityIds().includes(
+            entityState.entityId,
+          ),
       ),
       map(
         (entityState): NowPlayingUpdate => ({
@@ -282,29 +292,45 @@ export const createNowPlayingAdapter = ({
     )
     .pipe(share())
 
-  const weatherSubscription = weatherEntityId
-    ? entityStates
-        .pipe(
+  const weatherSubscription = entityStates
+    .pipe(
+      filter((entityState) =>
+        getWeatherEntityIds().includes(
+          entityState.entityId,
+        ),
+      ),
+      // Dedupe per weather entity id — displays may point at different ones.
+      groupBy((entityState) => entityState.entityId),
+      mergeMap((entityGroup) =>
+        entityGroup.pipe(
+          map((entityState) => ({
+            weatherEntityId: entityState.entityId,
+            weather:
+              mapHomeAssistantStateToWeather(entityState),
+          })),
           filter(
-            (entityState) =>
-              entityState.entityId === weatherEntityId,
-          ),
-          map(mapHomeAssistantStateToWeather),
-          filter(
-            (weather): weather is WeatherData =>
-              weather !== null,
+            (
+              entry,
+            ): entry is {
+              weatherEntityId: string
+              weather: WeatherData
+            } => entry.weather !== null,
           ),
           distinctUntilChanged(
             (previous, current) =>
-              JSON.stringify(previous) ===
-              JSON.stringify(current),
+              JSON.stringify(previous.weather) ===
+              JSON.stringify(current.weather),
           ),
-        )
-        .subscribe((weather) => {
-          viewDataStore.setWeather(weather)
-          onWeatherChanged()
-        })
-    : null
+        ),
+      ),
+    )
+    .subscribe(({ weatherEntityId, weather }) => {
+      viewDataStore.setWeather({
+        weatherEntityId,
+        data: weather,
+      })
+      onWeatherChanged(weatherEntityId)
+    })
 
   const pinnedEntityIdSet = new Set(pinnedEntityIds)
   const pinnedUpdates = updates.pipe(
@@ -374,9 +400,17 @@ export const createNowPlayingAdapter = ({
     })
 
   return {
+    /**
+     * Re-pull the HA snapshot so weather entities added since the last snapshot
+     * report their current value now (call after a weather-entity config change).
+     */
+    refreshWeather: () => {
+      weatherRefreshSubject.next()
+    },
     close: () => {
       subscription.unsubscribe()
-      weatherSubscription?.unsubscribe()
+      weatherSubscription.unsubscribe()
+      weatherRefreshSubject.complete()
     },
   }
 }

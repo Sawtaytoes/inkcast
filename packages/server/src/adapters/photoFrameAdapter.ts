@@ -32,8 +32,8 @@ type PhotoHistory = {
  */
 export const createPhotoFrameAdapter = ({
   immichConfig,
-  intervalMinutes,
-  recencyHalfLifeDays,
+  getIntervalMinutes,
+  getRecencyHalfLifeDays,
   devices,
   deviceConfigStore,
   viewDataStore,
@@ -41,15 +41,16 @@ export const createPhotoFrameAdapter = ({
   pushDevice,
 }: {
   immichConfig: ImmichConfig
-  intervalMinutes: number
-  recencyHalfLifeDays: number
+  /** Rotation interval for a device, minutes (resolved live from HA config). */
+  getIntervalMinutes: (deviceId: string) => number
+  /** Recency half-life for a device, days (resolved live from HA config). */
+  getRecencyHalfLifeDays: (deviceId: string) => number
   devices: readonly ConfiguredDevice[]
   deviceConfigStore: DeviceConfigStore
   viewDataStore: ViewDataStore
   getActiveView: (deviceId: string) => ViewName
   pushDevice: (deviceId: string) => Promise<boolean>
 }) => {
-  const intervalMilliseconds = intervalMinutes * 60_000
   const historyByDeviceId = new Map<string, PhotoHistory>()
 
   const getHistory = (deviceId: string): PhotoHistory =>
@@ -176,7 +177,8 @@ export const createPhotoFrameAdapter = ({
         config: immichConfig,
         personIds: source.personIds,
         query: source.queryText || undefined,
-        recencyHalfLifeDays,
+        recencyHalfLifeDays:
+          getRecencyHalfLifeDays(deviceId),
       })
       if (!assetId) {
         console.error(
@@ -293,7 +295,7 @@ export const createPhotoFrameAdapter = ({
         const isStale =
           !current ||
           Date.now() - current.fetchedAtMs >=
-            intervalMilliseconds
+            getIntervalMinutes(device.id) * 60_000
         if (isStale) {
           void refreshDevice(device.id)
         }

@@ -70,19 +70,25 @@ describe("buildDiscoveryMessages", () => {
       "text", // Photo Frame: People
       "text", // Photo Frame: Query
       "text", // Agenda: Calendars
+      "text", // Weather: Entity
+      "number", // Photo Frame: Rotation minutes
+      "number", // Photo Frame: Recency half-life days
       "button", // Photo Frame: Next photo
       "button", // Photo Frame: Previous photo
       "sensor", // last render
     ])
   })
 
-  test("the global device exposes the music sensor + agenda calendars", () => {
+  test("the global device exposes the music sensor + inherited defaults", () => {
     const globalMessages = buildGlobalDiscoveryMessages()
     expect(
       globalMessages.map((message) => message.topic),
     ).toEqual([
       "homeassistant/binary_sensor/inkcast/server_now_playing_active/config",
       "homeassistant/text/inkcast/server_agenda_calendars/config",
+      "homeassistant/text/inkcast/server_weather_entity/config",
+      "homeassistant/number/inkcast/server_photo_interval/config",
+      "homeassistant/number/inkcast/server_photo_recency/config",
     ])
     expect(globalMessages[0].payload.state_topic).toBe(
       "inkcast/now_playing_active",

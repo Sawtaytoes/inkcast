@@ -52,22 +52,19 @@ const EnvSchema = z.object({
     z.string(),
     "music_assistant,plex",
   ),
-  HOME_ASSISTANT_WEATHER_ENTITY: z._default(z.string(), ""),
-  // NOTE: which calendars feed the agenda view is HA config (the "Agenda:
-  // Calendars" text entities, global + per-device), NOT an env var — see
-  // docs/decisions/2026-07-02-agenda-calendars-are-ha-config-entities-not-env.md.
-  // Only the poll interval (server tuning, like INKCAST_PHOTO_MINUTES) is env.
+  // NOTE: the weather entity, the agenda calendars, the photo rotation
+  // interval, and the photo recency half-life are all HA config exposed via
+  // MQTT (global default on the Inkcast Server device + a per-screen
+  // override), NOT env vars — see docs/decisions/
+  // 2026-07-03-user-tunable-view-settings-are-ha-config-entities.md. Only the
+  // agenda poll interval (a server-internal cadence, not a display setting)
+  // stays in env.
   INKCAST_CALENDAR_MINUTES: z._default(
     z.coerce.number(),
     15,
   ),
   IMMICH_URL: z._default(z.string(), ""),
   IMMICH_API_TOKEN: z._default(z.string(), ""),
-  INKCAST_PHOTO_MINUTES: z._default(z.coerce.number(), 10),
-  INKCAST_PHOTO_RECENCY_HALF_LIFE_DAYS: z._default(
-    z.coerce.number(),
-    365,
-  ),
 })
 
 /**
@@ -151,8 +148,6 @@ export type HomeAssistantConfig = {
   token: string
   /** Integrations whose players the follow mode tracks. */
   followedPlatforms: readonly string[]
-  /** HA weather entity feeding the weather-bearing clock view ("" = off). */
-  weatherEntityId: string
   /** How often the agenda adapter re-pulls each device's calendars, minutes. */
   calendarPollMinutes: number
 }
@@ -160,10 +155,6 @@ export type HomeAssistantConfig = {
 export type ImmichSettings = {
   url: string
   apiKey: string
-  /** Photo-frame rotation interval, minutes. */
-  intervalMinutes: number
-  /** Recency-weighting half-life for the random photo pick, days. */
-  recencyHalfLifeDays: number
 }
 
 export type InkcastConfig = {
@@ -215,15 +206,11 @@ export const loadConfig = (
         parsed.HOME_ASSISTANT_FOLLOW_PLATFORMS.split(",")
           .map((platform) => platform.trim())
           .filter((platform) => platform.length > 0),
-      weatherEntityId: parsed.HOME_ASSISTANT_WEATHER_ENTITY,
       calendarPollMinutes: parsed.INKCAST_CALENDAR_MINUTES,
     },
     immich: {
       url: parsed.IMMICH_URL,
       apiKey: parsed.IMMICH_API_TOKEN,
-      intervalMinutes: parsed.INKCAST_PHOTO_MINUTES,
-      recencyHalfLifeDays:
-        parsed.INKCAST_PHOTO_RECENCY_HALF_LIFE_DAYS,
     },
   }
 }
