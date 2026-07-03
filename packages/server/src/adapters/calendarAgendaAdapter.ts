@@ -6,16 +6,22 @@ import type {
 } from "../state/viewDataStore.ts"
 
 /**
- * The calendar-agenda adapter: on an interval it pulls each configured
- * device's calendars from Home Assistant's REST calendar endpoint, maps them to
- * the day's events, stores them per device, and — when a device's day actually
- * changes — re-pushes it so an imminent appointment surfaces. This mirrors the
- * weather flow (`nowPlayingAdapter`'s weather branch → `onWeatherChanged`):
- * Inkcast pulls the data and renders it; Home Assistant automations decide
- * *when* the panel switches to the agenda view. A calendar entity's *state*
- * only exposes the single next event, so the full-day list comes from the REST
- * endpoint (`GET /api/calendars/<entity>?start=&end=`), fetched with the same
- * long-lived token `haArtwork` already uses.
+ * The calendar-agenda adapter: on an interval it pulls each device's calendars
+ * from Home Assistant's REST calendar endpoint, maps them to the day's events,
+ * stores them per device, and — when a device's day actually changes — re-pushes
+ * it so an imminent appointment surfaces. This mirrors the weather flow
+ * (`nowPlayingAdapter`'s weather branch → `onWeatherChanged`): Inkcast pulls the
+ * data and renders it; Home Assistant automations decide *when* the panel
+ * switches to the agenda view. A calendar entity's *state* only exposes the
+ * single next event, so the full-day list comes from the REST endpoint
+ * (`GET /api/calendars/<entity>?start=&end=`), fetched with the same long-lived
+ * token `haArtwork` already uses.
+ *
+ * WHICH calendars a device uses is HA config, not adapter config: the caller
+ * passes `getCalendarEntityIds`, which resolves a device's `Agenda: Calendars`
+ * text entity (per-device, falling back to the global default) at fetch time,
+ * so a change from Home Assistant takes effect on the next poll or refresh — no
+ * env var, no restart (see docs/decisions/2026-07-02-agenda-calendars-are-ha-config-entities-not-env.md).
  */
 
 /** One event as Home Assistant's REST calendar endpoint returns it. */
@@ -23,12 +29,6 @@ type WireCalendarEvent = {
   start?: { dateTime?: string; date?: string }
   end?: { dateTime?: string; date?: string }
   summary?: string
-}
-
-/** A device and the calendars whose events make up its agenda. */
-export type AgendaDeviceConfig = {
-  deviceId: string
-  calendarEntityIds: readonly string[]
 }
 
 /**
@@ -112,14 +112,20 @@ const fetchCalendarEvents = async ({
 export const createCalendarAgendaAdapter = ({
   homeAssistantUrl,
   homeAssistantToken,
-  agendaDevices,
+  deviceIds,
+  getCalendarEntityIds,
   pollMinutes,
   viewDataStore,
   onAgendaChanged,
 }: {
   homeAssistantUrl: string
   homeAssistantToken: string
-  agendaDevices: readonly AgendaDeviceConfig[]
+  /** Every device the server manages (each may or may not have calendars set). */
+  deviceIds: readonly string[]
+  /** Resolve a device's configured calendars (per-device → global default). */
+  getCalendarEntityIds: (
+    deviceId: string,
+  ) => readonly string[]
   pollMinutes: number
   viewDataStore: ViewDataStore
   /** Re-push the device if it's currently showing the agenda view. */
@@ -129,19 +135,20 @@ export const createCalendarAgendaAdapter = ({
 
   /** Fetch + merge + store one device's day; notify only when it changed. */
   const refreshDevice = async (deviceId: string) => {
-    const deviceConfig = agendaDevices.find(
-      (candidate) => candidate.deviceId === deviceId,
-    )
-    if (!deviceConfig) {
+    if (!deviceIds.includes(deviceId)) {
       return
     }
 
     try {
+      const calendarEntityIds =
+        getCalendarEntityIds(deviceId)
       const { startIso, endIso } = getTodayWindow(
         new Date(),
       )
+      // No calendars configured for this device → an empty day (the view
+      // degrades to the weather clock).
       const perCalendarEvents = await Promise.all(
-        deviceConfig.calendarEntityIds.map((entityId) =>
+        calendarEntityIds.map((entityId) =>
           fetchCalendarEvents({
             homeAssistantUrl,
             homeAssistantToken,
@@ -177,8 +184,8 @@ export const createCalendarAgendaAdapter = ({
 
   const subscription = timer(0, pollMilliseconds).subscribe(
     () => {
-      agendaDevices.forEach((deviceConfig) => {
-        void refreshDevice(deviceConfig.deviceId)
+      deviceIds.forEach((deviceId) => {
+        void refreshDevice(deviceId)
       })
     },
   )

@@ -257,39 +257,61 @@ const main = async () => {
     },
   })
 
-  // Calendar agenda adapter: pulls each configured device's calendars from HA
+  // Which calendars a device's agenda uses is HA config, resolved live from the
+  // "Agenda: Calendars" text entities: the device's own value, or the global
+  // default (Inkcast Server device) when the device's is empty. Comma-separated
+  // calendar entity ids. No env var — see docs/decisions/
+  // 2026-07-02-agenda-calendars-are-ha-config-entities-not-env.md.
+  const parseCalendarEntityIds = (calendarsText: string) =>
+    calendarsText
+      .split(",")
+      .map((entityId) => entityId.trim())
+      .filter((entityId) => entityId.length > 0)
+  const resolveCalendarEntityIds = (deviceId: string) => {
+    const perDevice = parseCalendarEntityIds(
+      deviceConfigStore.getAgendaCalendars(deviceId),
+    )
+    return perDevice.length > 0
+      ? perDevice
+      : parseCalendarEntityIds(
+          deviceConfigStore.getGlobalAgendaCalendars(),
+        )
+  }
+
+  // Calendar agenda adapter: pulls each device's configured calendars from HA
   // (like the weather flow) and re-pushes it when its day changes, so an
   // imminent appointment surfaces on the "Clock (Agenda)" view. HA automations
   // decide WHEN a display switches to that view; this just supplies the data.
-  // Enabled only when HA is configured and at least one device has calendars.
-  const agendaDevices = config.devices
-    .filter(
-      (device) =>
-        (device.calendarEntityIds?.length ?? 0) > 0,
-    )
-    .map((device) => ({
-      deviceId: device.id,
-      calendarEntityIds: device.calendarEntityIds ?? [],
-    }))
-  const calendarAgendaAdapter =
-    hasNowPlayingAdapter && agendaDevices.length > 0
-      ? createCalendarAgendaAdapter({
-          homeAssistantUrl: config.homeAssistant.url,
-          homeAssistantToken: config.homeAssistant.token,
-          agendaDevices,
-          pollMinutes:
-            config.homeAssistant.calendarPollMinutes,
-          viewDataStore,
-          onAgendaChanged: (deviceId) => {
-            if (
-              deviceStore.getActiveView(deviceId) ===
-              "Clock (Agenda)"
-            ) {
-              pushDeviceLogged(deviceId)
-            }
-          },
-        })
-      : null
+  // Enabled whenever HA is configured; a device with no calendars set just
+  // renders an empty (weather-clock) agenda until one is set from HA.
+  const calendarAgendaAdapter = hasNowPlayingAdapter
+    ? createCalendarAgendaAdapter({
+        homeAssistantUrl: config.homeAssistant.url,
+        homeAssistantToken: config.homeAssistant.token,
+        deviceIds: config.devices.map(
+          (device) => device.id,
+        ),
+        getCalendarEntityIds: resolveCalendarEntityIds,
+        pollMinutes:
+          config.homeAssistant.calendarPollMinutes,
+        viewDataStore,
+        onAgendaChanged: (deviceId) => {
+          if (
+            deviceStore.getActiveView(deviceId) ===
+            "Clock (Agenda)"
+          ) {
+            pushDeviceLogged(deviceId)
+          }
+        },
+      })
+    : null
+
+  /** Refresh every device's agenda (global calendars changed). */
+  const refreshAllAgendas = () => {
+    config.devices.forEach((device) => {
+      void calendarAgendaAdapter?.refreshDevice(device.id)
+    })
+  }
 
   // Immich photo frame: rotates a recency-weighted random photo of the
   // configured people/query on an interval — for devices SHOWING the Photo
@@ -391,6 +413,29 @@ const main = async () => {
                 deviceConfigStore.getPhotoQuery(deviceId),
               ),
             onApplied: restartPhotoFrame,
+          },
+        ],
+        [
+          "agendaCalendars",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              deviceConfigStore.setAgendaCalendars({
+                deviceId,
+                calendarsText: payload,
+              })
+              return payload
+            },
+            getHasValue: (deviceId) =>
+              Boolean(
+                deviceConfigStore.getAgendaCalendars(
+                  deviceId,
+                ),
+              ),
+            onApplied: async (deviceId) => {
+              await calendarAgendaAdapter?.refreshDevice(
+                deviceId,
+              )
+            },
           },
         ],
         [
@@ -534,6 +579,10 @@ const main = async () => {
         string,
         { command: string; state: string }
       > = {
+        agendaCalendars: {
+          command: topics.agendaCalendarsCommand,
+          state: topics.agendaCalendarsState,
+        },
         photoPeople: {
           command: topics.photoPeopleCommand,
           state: topics.photoPeopleState,
@@ -588,11 +637,15 @@ const main = async () => {
         | "photoNext"
         | "photoPrevious"
         | "knob"
+        | "globalAgendaCalendars"
+        | "globalAgendaCalendarsRestore"
       /** Set when kind is "knob". */
       knobKind?: string
       /** True for a knob's retained-state (boot restore) topic. */
       isRestore?: boolean
     }
+
+    const globalTopics = buildGlobalTopics(baseTopic)
 
     const commandRoutes = new Map<string, TopicRoute>()
     config.devices.forEach((device) => {
@@ -641,6 +694,18 @@ const main = async () => {
       })
     })
 
+    // Global "Agenda: Calendars" (Inkcast Server device): the household default
+    // used by any display whose own calendars are empty. Retained state doubles
+    // as boot-time restore.
+    commandRoutes.set(globalTopics.agendaCalendarsCommand, {
+      deviceId: "",
+      kind: "globalAgendaCalendars",
+    })
+    commandRoutes.set(globalTopics.agendaCalendarsState, {
+      deviceId: "",
+      kind: "globalAgendaCalendarsRestore",
+    })
+
     await publisher.subscribe({
       topics: Array.from(commandRoutes.keys()),
       handler: async ({ topic, payload }) => {
@@ -651,6 +716,31 @@ const main = async () => {
 
         if (route.kind === "refresh") {
           await pushController.pushDevice(route.deviceId)
+          return
+        }
+        if (route.kind === "globalAgendaCalendars") {
+          deviceConfigStore.setGlobalAgendaCalendars(
+            payload,
+          )
+          await publisher.publish({
+            topic: globalTopics.agendaCalendarsState,
+            payload,
+            isRetained: true,
+          })
+          refreshAllAgendas()
+          return
+        }
+        if (route.kind === "globalAgendaCalendarsRestore") {
+          // Boot-time restore from the retained state topic (only if nothing
+          // set this run).
+          if (
+            !deviceConfigStore.getGlobalAgendaCalendars()
+          ) {
+            deviceConfigStore.setGlobalAgendaCalendars(
+              payload,
+            )
+            refreshAllAgendas()
+          }
           return
         }
         if (route.kind === "view") {

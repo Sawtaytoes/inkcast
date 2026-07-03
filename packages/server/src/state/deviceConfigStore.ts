@@ -35,6 +35,18 @@ export type DeviceConfigStore = {
     deviceId: string
     peopleText: string
   }) => void
+  /**
+   * Per-device agenda calendars (comma-separated HA calendar entity ids) for the
+   * `Clock (Agenda)` view. Empty = fall back to the global default below.
+   */
+  getAgendaCalendars: (deviceId: string) => string
+  setAgendaCalendars: (params: {
+    deviceId: string
+    calendarsText: string
+  }) => void
+  /** Global default agenda calendars (Inkcast Server device), used when a device's own is empty. */
+  getGlobalAgendaCalendars: () => string
+  setGlobalAgendaCalendars: (calendarsText: string) => void
   /** Free-text Immich smart-search query for the Photo Frame ("" = off). */
   getPhotoQuery: (deviceId: string) => string
   setPhotoQuery: (params: {
@@ -88,6 +100,14 @@ export const createDeviceConfigStore =
   (): DeviceConfigStore => {
     const photoPeopleByDeviceId = new Map<string, string>()
     const photoQueryByDeviceId = new Map<string, string>()
+    const agendaCalendarsByDeviceId = new Map<
+      string,
+      string
+    >()
+    const globalAgendaCalendarsHolder = new Map<
+      "global",
+      string
+    >()
     const ditherByDeviceId = new Map<
       string,
       DitherAlgorithm
@@ -111,6 +131,22 @@ export const createDeviceConfigStore =
         photoQueryByDeviceId.get(deviceId) ?? "",
       setPhotoQuery: ({ deviceId, queryText }) => {
         photoQueryByDeviceId.set(deviceId, queryText)
+      },
+      getAgendaCalendars: (deviceId) =>
+        agendaCalendarsByDeviceId.get(deviceId) ?? "",
+      setAgendaCalendars: ({ deviceId, calendarsText }) => {
+        agendaCalendarsByDeviceId.set(
+          deviceId,
+          calendarsText,
+        )
+      },
+      getGlobalAgendaCalendars: () =>
+        globalAgendaCalendarsHolder.get("global") ?? "",
+      setGlobalAgendaCalendars: (calendarsText) => {
+        globalAgendaCalendarsHolder.set(
+          "global",
+          calendarsText,
+        )
       },
       getDitherAlgorithm: (deviceId) =>
         ditherByDeviceId.get(deviceId),

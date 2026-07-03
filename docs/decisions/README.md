@@ -7,6 +7,7 @@ proposing a change; a settled decision here overrides default instinct.
 
 | Date | Decision | Status |
 | --- | --- | --- |
+| 2026-07-02 | [Agenda calendars are HA/MQTT config entities (global + per-device), never env vars](2026-07-02-agenda-calendars-are-ha-config-entities-not-env.md) | Accepted |
 | 2026-07-02 | [The Clock (Agenda) view pulls calendar events from HA; it is not pushed](2026-07-02-clock-agenda-view-pulls-calendar-from-ha.md) | Accepted |
 | 2026-07-02 | [The "no dithering" option is labeled `off`, not `none` (HA reserves `none`)](2026-07-02-dither-off-token-not-none-ha-reserved.md) | Accepted |
 | 2026-07-02 | [Follow-mode player exclusion is decided by the HA automation, not by Inkcast](2026-07-02-follow-exclusion-moves-to-ha-automation.md) | Accepted |

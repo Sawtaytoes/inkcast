@@ -53,10 +53,10 @@ const EnvSchema = z.object({
     "music_assistant,plex",
   ),
   HOME_ASSISTANT_WEATHER_ENTITY: z._default(z.string(), ""),
-  HOME_ASSISTANT_CALENDAR_ENTITIES: z._default(
-    z.string(),
-    "",
-  ),
+  // NOTE: which calendars feed the agenda view is HA config (the "Agenda:
+  // Calendars" text entities, global + per-device), NOT an env var — see
+  // docs/decisions/2026-07-02-agenda-calendars-are-ha-config-entities-not-env.md.
+  // Only the poll interval (server tuning, like INKCAST_PHOTO_MINUTES) is env.
   INKCAST_CALENDAR_MINUTES: z._default(
     z.coerce.number(),
     15,
@@ -98,17 +98,16 @@ const DeviceConfigSchema = z.object({
     { algorithm: "floyd-steinberg", supersampleFactor: 2 },
   ),
   nowPlayingEntityId: z.optional(z.string()),
-  calendarEntityIds: z.optional(z.array(z.string())),
 })
 
 /**
  * A device as the server runs it: the core render metadata plus the server's
  * per-device data-source wiring (which HA `media_player` feeds its now-playing
- * view, and which HA calendars feed its agenda view).
+ * view). Which HA calendars feed the agenda view is runtime HA config (the
+ * "Agenda: Calendars" text entities), not device wiring.
  */
 export type ConfiguredDevice = DeviceMetadata & {
   nowPlayingEntityId?: string
-  calendarEntityIds?: readonly string[]
 }
 
 const expandDevice = (
@@ -154,12 +153,6 @@ export type HomeAssistantConfig = {
   followedPlatforms: readonly string[]
   /** HA weather entity feeding the weather-bearing clock view ("" = off). */
   weatherEntityId: string
-  /**
-   * Default HA calendar entities feeding the agenda view, for any device that
-   * doesn't pin its own `calendarEntityIds`. Empty = agenda adapter off unless
-   * a device pins calendars.
-   */
-  defaultCalendarEntityIds: readonly string[]
   /** How often the agenda adapter re-pulls each device's calendars, minutes. */
   calendarPollMinutes: number
 }
@@ -188,10 +181,6 @@ export const loadConfig = (
   environment: NodeJS.ProcessEnv = process.env,
 ): InkcastConfig => {
   const parsed = EnvSchema.parse(environment)
-  const defaultCalendarEntityIds =
-    parsed.HOME_ASSISTANT_CALENDAR_ENTITIES.split(",")
-      .map((entityId) => entityId.trim())
-      .filter((entityId) => entityId.length > 0)
   const devices = loadDevices(
     parsed.INKCAST_DEVICES_FILE,
   ).map((device) => ({
@@ -201,12 +190,6 @@ export const loadConfig = (
       device.nowPlayingEntityId ||
       parsed.HOME_ASSISTANT_NOW_PLAYING_ENTITY ||
       undefined,
-    // A device without its own calendars falls back to the global default.
-    calendarEntityIds:
-      device.calendarEntityIds &&
-      device.calendarEntityIds.length > 0
-        ? device.calendarEntityIds
-        : defaultCalendarEntityIds,
   }))
 
   return {
@@ -233,7 +216,6 @@ export const loadConfig = (
           .map((platform) => platform.trim())
           .filter((platform) => platform.length > 0),
       weatherEntityId: parsed.HOME_ASSISTANT_WEATHER_ENTITY,
-      defaultCalendarEntityIds,
       calendarPollMinutes: parsed.INKCAST_CALENDAR_MINUTES,
     },
     immich: {

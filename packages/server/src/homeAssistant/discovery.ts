@@ -62,6 +62,8 @@ export const buildDeviceTopics = ({
     photoPeopleState: `${base}/photo_people`,
     photoQueryCommand: `${base}/photo_query/set`,
     photoQueryState: `${base}/photo_query`,
+    agendaCalendarsCommand: `${base}/agenda_calendars/set`,
+    agendaCalendarsState: `${base}/agenda_calendars`,
     photoNextCommand: `${base}/photo_next/set`,
     photoPreviousCommand: `${base}/photo_previous/set`,
     ditherCommand: `${base}/dither/set`,
@@ -89,6 +91,9 @@ export const buildGlobalTopics = (
 ) => ({
   /** Retained ON/OFF: is the followed player actually playing right now. */
   nowPlayingActiveState: `${baseTopic}/now_playing_active`,
+  /** Global default agenda calendars (comma-separated HA calendar entity ids). */
+  agendaCalendarsCommand: `${baseTopic}/agenda_calendars/set`,
+  agendaCalendarsState: `${baseTopic}/agenda_calendars`,
 })
 
 /** The HA-facing colour-mode option strings (double as MQTT payloads). */
@@ -330,6 +335,22 @@ export const buildDiscoveryMessages = ({
       },
     },
     {
+      // Which HA calendars feed this device's Clock (Agenda) view
+      // (comma-separated calendar entity ids). Empty = use the global default
+      // on the Inkcast Server device. Retained state doubles as persistence.
+      topic: discoveryTopic("text", "agenda_calendars"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Agenda: Calendars",
+        unique_id: `inkcast_${device.id}_agenda_calendars`,
+        command_topic: topics.agendaCalendarsCommand,
+        state_topic: topics.agendaCalendarsState,
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
       topic: discoveryTopic("button", "photo_next"),
       isRetained: true,
       payload: {
@@ -413,6 +434,23 @@ export const buildGlobalDiscoveryMessages = (
         state_topic: topics.nowPlayingActiveState,
         payload_on: "ON",
         payload_off: "OFF",
+        device: serverDeviceBlock,
+      },
+    },
+    {
+      // Global default agenda calendars — the household calendars every
+      // display's Clock (Agenda) view uses unless a display overrides them with
+      // its own "Agenda: Calendars" text entity. Comma-separated calendar
+      // entity ids; retained state = persistence.
+      topic: `${discoveryPrefix}/text/${nodeId}/server_agenda_calendars/config`,
+      isRetained: true as const,
+      payload: {
+        ...availability,
+        name: "Agenda: Calendars",
+        unique_id: "inkcast_server_agenda_calendars",
+        command_topic: topics.agendaCalendarsCommand,
+        state_topic: topics.agendaCalendarsState,
+        entity_category: "config",
         device: serverDeviceBlock,
       },
     },

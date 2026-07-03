@@ -69,18 +69,20 @@ describe("buildDiscoveryMessages", () => {
       "number", // Display: Crop left
       "text", // Photo Frame: People
       "text", // Photo Frame: Query
+      "text", // Agenda: Calendars
       "button", // Photo Frame: Next photo
       "button", // Photo Frame: Previous photo
       "sensor", // last render
     ])
   })
 
-  test("the global device exposes the music sensor", () => {
+  test("the global device exposes the music sensor + agenda calendars", () => {
     const globalMessages = buildGlobalDiscoveryMessages()
     expect(
       globalMessages.map((message) => message.topic),
     ).toEqual([
       "homeassistant/binary_sensor/inkcast/server_now_playing_active/config",
+      "homeassistant/text/inkcast/server_agenda_calendars/config",
     ])
     expect(globalMessages[0].payload.state_topic).toBe(
       "inkcast/now_playing_active",
