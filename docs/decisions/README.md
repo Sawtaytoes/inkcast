@@ -7,6 +7,7 @@ proposing a change; a settled decision here overrides default instinct.
 
 | Date | Decision | Status |
 | --- | --- | --- |
+| 2026-07-03 | [ESPHome clients pull images over HTTP via ephemeral single-use token URLs (evict after full flush)](2026-07-03-esphome-http-image-delivery.md) | Accepted |
 | 2026-07-03 | [User-tunable view settings are HA/MQTT config entities (global + per-device), never env vars](2026-07-03-user-tunable-view-settings-are-ha-config-entities.md) | Accepted |
 | 2026-07-02 | [Agenda calendars are HA/MQTT config entities (global + per-device), never env vars](2026-07-02-agenda-calendars-are-ha-config-entities-not-env.md) | Accepted |
 | 2026-07-02 | [The Clock (Agenda) view pulls calendar events from HA; it is not pushed](2026-07-02-clock-agenda-view-pulls-calendar-from-ha.md) | Accepted |
