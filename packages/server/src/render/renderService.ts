@@ -9,6 +9,7 @@ import {
 } from "@inkcast/render/renderDeviceImage"
 import { createSatoriEngine } from "@inkcast/render/satoriEngine"
 import type {
+  AgendaData,
   NowPlayingData,
   PhotoFrameData,
   WeatherData,
@@ -30,6 +31,7 @@ export type RenderService = {
     nowPlaying?: NowPlayingData
     photoFrame?: PhotoFrameData
     weather?: WeatherData
+    agenda?: AgendaData
     adjustments?: DitherAdjustments
     safeAreaInset?: SafeAreaInset
   }) => Promise<Buffer>
@@ -56,6 +58,7 @@ export const createRenderService = async ({
       nowPlaying,
       photoFrame,
       weather,
+      agenda,
       adjustments,
       safeAreaInset,
     }) => {
@@ -83,6 +86,7 @@ export const createRenderService = async ({
           nowPlaying,
           photoFrame,
           weather,
+          agenda,
         }),
         device,
         adjustments,

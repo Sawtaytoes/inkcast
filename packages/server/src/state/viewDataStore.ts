@@ -30,6 +30,28 @@ export type WeatherData = {
   conditionText: string
 }
 
+/** One calendar event on the agenda view, as pulled from Home Assistant. */
+export type AgendaEvent = {
+  /**
+   * Event start, epoch ms. Stored numeric (not pre-formatted) so the registry
+   * formats the time per panel size and re-filters "upcoming" on each minute
+   * tick without a refetch.
+   */
+  startMs: number
+  summary: string
+  /** All-day events carry a date but no wall-clock time. */
+  isAllDay: boolean
+}
+
+/**
+ * Today's calendar agenda for the agenda-bearing clock view — the full day's
+ * events sorted ascending by start. The registry filters to upcoming and slices
+ * to the panel's event budget at render time.
+ */
+export type AgendaData = {
+  events: readonly AgendaEvent[]
+}
+
 /**
  * In-memory latest-value store for view data — now-playing keyed by the
  * upstream entity id, photo-frame keyed by device id, weather global.
@@ -54,6 +76,11 @@ export type ViewDataStore = {
   }) => void
   getWeather: () => WeatherData | undefined
   setWeather: (data: WeatherData) => void
+  getAgenda: (deviceId: string) => AgendaData | undefined
+  setAgenda: (params: {
+    deviceId: string
+    data: AgendaData
+  }) => void
 }
 
 export const createViewDataStore = (): ViewDataStore => {
@@ -66,6 +93,7 @@ export const createViewDataStore = (): ViewDataStore => {
     PhotoFrameData
   >()
   const weatherHolder = new Map<"current", WeatherData>()
+  const agendaByDeviceId = new Map<string, AgendaData>()
 
   return {
     getNowPlaying: (entityId) =>
@@ -85,6 +113,10 @@ export const createViewDataStore = (): ViewDataStore => {
     getWeather: () => weatherHolder.get("current"),
     setWeather: (data) => {
       weatherHolder.set("current", data)
+    },
+    getAgenda: (deviceId) => agendaByDeviceId.get(deviceId),
+    setAgenda: ({ deviceId, data }) => {
+      agendaByDeviceId.set(deviceId, data)
     },
   }
 }

@@ -33,6 +33,7 @@ describe("buildOpenApiDocument", () => {
       "Photo Frame",
       "Clock",
       "Clock (Weather)",
+      "Clock (Agenda)",
     ])
   })
 

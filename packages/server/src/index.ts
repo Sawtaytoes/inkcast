@@ -4,6 +4,7 @@ import {
   DITHER_ALGORITHMS,
   type DitherAlgorithm,
 } from "@inkcast/core/devices/device"
+import { createCalendarAgendaAdapter } from "./adapters/calendarAgendaAdapter.ts"
 import {
   createNowPlayingAdapter,
   FOLLOWED_NOW_PLAYING_KEY,
@@ -245,7 +246,9 @@ const main = async () => {
       })
     : null
 
-  // Keep clock-bearing panels on real time: re-push them each minute.
+  // Keep clock-bearing panels on real time: re-push them each minute. This
+  // also keeps the agenda view honest — the minute tick re-renders it, dropping
+  // events that have just started and promoting the next one.
   const clockTicker = startClockTicker({
     onMinuteTick: () => {
       pushDevicesShowingView({
@@ -253,6 +256,40 @@ const main = async () => {
       })
     },
   })
+
+  // Calendar agenda adapter: pulls each configured device's calendars from HA
+  // (like the weather flow) and re-pushes it when its day changes, so an
+  // imminent appointment surfaces on the "Clock (Agenda)" view. HA automations
+  // decide WHEN a display switches to that view; this just supplies the data.
+  // Enabled only when HA is configured and at least one device has calendars.
+  const agendaDevices = config.devices
+    .filter(
+      (device) =>
+        (device.calendarEntityIds?.length ?? 0) > 0,
+    )
+    .map((device) => ({
+      deviceId: device.id,
+      calendarEntityIds: device.calendarEntityIds ?? [],
+    }))
+  const calendarAgendaAdapter =
+    hasNowPlayingAdapter && agendaDevices.length > 0
+      ? createCalendarAgendaAdapter({
+          homeAssistantUrl: config.homeAssistant.url,
+          homeAssistantToken: config.homeAssistant.token,
+          agendaDevices,
+          pollMinutes:
+            config.homeAssistant.calendarPollMinutes,
+          viewDataStore,
+          onAgendaChanged: (deviceId) => {
+            if (
+              deviceStore.getActiveView(deviceId) ===
+              "Clock (Agenda)"
+            ) {
+              pushDeviceLogged(deviceId)
+            }
+          },
+        })
+      : null
 
   // Immich photo frame: rotates a recency-weighted random photo of the
   // configured people/query on an interval — for devices SHOWING the Photo
@@ -633,6 +670,16 @@ const main = async () => {
               await photoFrameAdapter.showPhotoFrame(
                 route.deviceId,
               )
+            } else if (payload === "Clock (Agenda)") {
+              // Switching in renders the currently-known day immediately, then
+              // a fresh pull re-pushes if the day has changed since last poll.
+              await pushController.setView({
+                deviceId: route.deviceId,
+                viewName: payload,
+              })
+              await calendarAgendaAdapter?.refreshDevice(
+                route.deviceId,
+              )
             } else {
               await pushController.setView({
                 deviceId: route.deviceId,
@@ -666,6 +713,15 @@ const main = async () => {
               // instead of waiting up to a full interval tick, so the panel
               // never shows the placeholder while people/query are set.
               await photoFrameAdapter.showPhotoFrame(
+                route.deviceId,
+              )
+            } else if (payload === "Clock (Agenda)") {
+              // Boot-time restore into the agenda: push what we have, then
+              // pull the day so it's current without waiting for the poll.
+              await pushController.pushDevice(
+                route.deviceId,
+              )
+              await calendarAgendaAdapter?.refreshDevice(
                 route.deviceId,
               )
             } else {
@@ -820,7 +876,7 @@ const main = async () => {
     port: config.port,
   })
   console.log(
-    `[inkcast] serving on :${config.port} (engine=${config.renderEngine}, mqtt=${publisher.isEnabled ? "on" : "off"}, ha=${hasNowPlayingAdapter ? "on" : "off"}, devices=${config.devices.length})`,
+    `[inkcast] serving on :${config.port} (engine=${config.renderEngine}, mqtt=${publisher.isEnabled ? "on" : "off"}, ha=${hasNowPlayingAdapter ? "on" : "off"}, agenda=${calendarAgendaAdapter ? "on" : "off"}, devices=${config.devices.length})`,
   )
 
   const shutdown = async () => {
@@ -828,6 +884,7 @@ const main = async () => {
     server.close()
     clockTicker.close()
     nowPlayingAdapter?.close()
+    calendarAgendaAdapter?.close()
     photoFrameAdapter?.close()
     await publisher.close()
     await renderService.close()

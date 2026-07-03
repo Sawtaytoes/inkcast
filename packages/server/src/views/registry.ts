@@ -1,4 +1,5 @@
 import type { DeviceMetadata } from "@inkcast/core/devices/device"
+import { ClockAgendaView } from "@inkcast/views/ClockAgendaView"
 import { ClockView } from "@inkcast/views/ClockView"
 import { ClockWeatherView } from "@inkcast/views/ClockWeatherView"
 import { NowPlayingDashboard } from "@inkcast/views/NowPlayingDashboard"
@@ -8,6 +9,7 @@ import { PhotoFrameView } from "@inkcast/views/PhotoFrameView"
 import { createElement, type ReactElement } from "react"
 import { IDLE_NOW_PLAYING } from "../adapters/nowPlayingAdapter.ts"
 import type {
+  AgendaData,
   NowPlayingData,
   PhotoFrameData,
   WeatherData,
@@ -29,6 +31,7 @@ export const VIEW_NAMES = [
   "Photo Frame",
   "Clock",
   "Clock (Weather)",
+  "Clock (Agenda)",
 ] as const
 export type ViewName = (typeof VIEW_NAMES)[number]
 
@@ -45,6 +48,7 @@ const CLOCK_BEARING_VIEW_NAMES: ReadonlySet<ViewName> =
     "Now Playing (Dashboard)",
     "Clock",
     "Clock (Weather)",
+    "Clock (Agenda)",
   ])
 
 export const getIsViewName = (
@@ -102,6 +106,29 @@ const formatCompactDate = (now: Date) => {
   return `${weekday}-${day}`
 }
 
+/** `2:30 PM` on the large panel, `2:30p` on the compact one; all-day → label. */
+const formatEventTime = ({
+  startMs,
+  isAllDay,
+  isCompact,
+}: {
+  startMs: number
+  isAllDay: boolean
+  isCompact: boolean
+}) => {
+  if (isAllDay) {
+    return isCompact ? "All" : "All day"
+  }
+  const eventDate = new Date(startMs)
+  return isCompact
+    ? formatCompactTime(eventDate)
+    : formatTime(eventDate)
+}
+
+/** How many events each panel can legibly show. */
+const MAX_AGENDA_EVENTS_COMPACT = 1
+const MAX_AGENDA_EVENTS_LARGE = 4
+
 /** Small panels get the compact date/time formats. */
 const COMPACT_PANEL_MAX_HEIGHT = 200
 
@@ -113,6 +140,7 @@ export const renderViewElement = ({
   nowPlaying,
   photoFrame,
   weather,
+  agenda,
 }: {
   viewName: ViewName
   device: DeviceMetadata
@@ -120,6 +148,7 @@ export const renderViewElement = ({
   nowPlaying?: NowPlayingData
   photoFrame?: PhotoFrameData
   weather?: WeatherData
+  agenda?: AgendaData
 }): ReactElement => {
   const panel = {
     width: device.width,
@@ -148,6 +177,39 @@ export const renderViewElement = ({
         : formatDate(now),
       temperatureText: weather?.temperatureText,
       conditionText: weather?.conditionText,
+    })
+  }
+  if (viewName === "Clock (Agenda)") {
+    // Drop events that have already started (matches "revert when it starts"),
+    // then slice to what the panel can legibly hold. Times are formatted per
+    // panel size here so the view stays a pure function of its props.
+    const upcomingEvents = (agenda?.events ?? []).filter(
+      (event) => event.startMs >= now.getTime(),
+    )
+    const maxEvents = isCompactClock
+      ? MAX_AGENDA_EVENTS_COMPACT
+      : MAX_AGENDA_EVENTS_LARGE
+    const events = upcomingEvents
+      .slice(0, maxEvents)
+      .map((event) => ({
+        timeText: formatEventTime({
+          startMs: event.startMs,
+          isAllDay: event.isAllDay,
+          isCompact: isCompactClock,
+        }),
+        summary: event.summary,
+      }))
+    return createElement(ClockAgendaView, {
+      ...panel,
+      time: isCompactClock
+        ? formatCompactTime(now)
+        : formatTime(now),
+      date: isCompactClock
+        ? formatCompactDate(now)
+        : formatDate(now),
+      temperatureText: weather?.temperatureText,
+      conditionText: weather?.conditionText,
+      events,
     })
   }
   if (viewName === "Photo Frame") {

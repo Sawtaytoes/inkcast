@@ -132,6 +132,7 @@ export const createPushController = ({
       ),
       photoFrame: viewDataStore.getPhotoFrame(deviceId),
       weather: viewDataStore.getWeather(),
+      agenda: viewDataStore.getAgenda(deviceId),
       ...(hasAdjustments
         ? {
             adjustments: {
