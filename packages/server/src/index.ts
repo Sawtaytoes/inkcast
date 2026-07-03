@@ -74,6 +74,12 @@ const getIsDitherAlgorithm = (
 ): value is DitherAlgorithm =>
   (DITHER_ALGORITHMS as readonly string[]).includes(value)
 
+// Fallback defaults for the Photo Frame tuning knobs, used until the HA config
+// entities (global default + per-device override) restore/seed their retained
+// state. Formerly the INKCAST_PHOTO_MINUTES / _RECENCY_HALF_LIFE_DAYS env vars.
+const DEFAULT_PHOTO_INTERVAL_MINUTES = 10
+const DEFAULT_PHOTO_RECENCY_HALF_LIFE_DAYS = 365
+
 /** Parse + clamp an HA number-entity payload ("50".."200", % steps). */
 const parsePercentPayload = (payload: string) => {
   const value = Number.parseFloat(payload)
@@ -90,6 +96,23 @@ const parsePixelPayload = (payload: string) => {
     return null
   }
   return Math.min(200, Math.max(0, Math.round(value)))
+}
+
+/** Parse + clamp an integer HA number-entity payload into [min, max]. */
+const parseBoundedInteger = ({
+  payload,
+  min,
+  max,
+}: {
+  payload: string
+  min: number
+  max: number
+}) => {
+  const value = Number.parseFloat(payload)
+  if (Number.isNaN(value)) {
+    return null
+  }
+  return Math.min(max, Math.max(min, Math.round(value)))
 }
 
 /** The config-knob kind key for a crop edge (matches the MQTT topic slug). */
@@ -130,6 +153,61 @@ const main = async () => {
   })
   const viewDataStore = createViewDataStore()
   const deviceConfigStore = createDeviceConfigStore()
+
+  // The weather entity, photo rotation interval, and photo recency half-life
+  // are all HA config (global default on the Inkcast Server device + a
+  // per-screen override), resolved live from the config store — no env vars.
+  // See docs/decisions/
+  // 2026-07-03-user-tunable-view-settings-are-ha-config-entities.md.
+  const resolveWeatherEntityId = (deviceId: string) =>
+    deviceConfigStore.getWeatherEntity(deviceId) ||
+    deviceConfigStore.getGlobalWeatherEntity()
+  const resolvePhotoIntervalMinutes = (
+    deviceId: string,
+  ) => {
+    const perDevice =
+      deviceConfigStore.getPhotoIntervalMinutes(deviceId)
+    if (perDevice !== undefined && perDevice > 0) {
+      return perDevice
+    }
+    const global =
+      deviceConfigStore.getGlobalPhotoIntervalMinutes()
+    if (global !== undefined && global > 0) {
+      return global
+    }
+    return DEFAULT_PHOTO_INTERVAL_MINUTES
+  }
+  const resolvePhotoRecencyHalfLifeDays = (
+    deviceId: string,
+  ) => {
+    const perDevice =
+      deviceConfigStore.getPhotoRecencyHalfLifeDays(
+        deviceId,
+      )
+    if (perDevice !== undefined && perDevice > 0) {
+      return perDevice
+    }
+    const global =
+      deviceConfigStore.getGlobalPhotoRecencyHalfLifeDays()
+    if (global !== undefined && global > 0) {
+      return global
+    }
+    return DEFAULT_PHOTO_RECENCY_HALF_LIFE_DAYS
+  }
+  // The union of every device's resolved weather entity — the set the HA
+  // stream watches (deduped, empties dropped). Read live so config edits take
+  // effect without a reconnect.
+  const getWeatherEntityIds = () =>
+    Array.from(
+      new Set(
+        config.devices
+          .map((device) =>
+            resolveWeatherEntityId(device.id),
+          )
+          .filter((entityId) => entityId.length > 0),
+      ),
+    )
+
   const pushController = createPushController({
     devices: config.devices,
     deviceStore,
@@ -138,6 +216,7 @@ const main = async () => {
     renderService,
     publisher,
     baseTopic,
+    resolveWeatherEntityId,
   })
 
   const pushDeviceLogged = (deviceId: string) => {
@@ -206,8 +285,7 @@ const main = async () => {
         followedPlatforms: hasUnpinnedDevice
           ? config.homeAssistant.followedPlatforms
           : [],
-        weatherEntityId:
-          config.homeAssistant.weatherEntityId,
+        getWeatherEntityIds,
         viewDataStore,
         onNowPlayingChanged: (entityKey) => {
           // The retained "Music playing" state is the signal HA automations
@@ -232,12 +310,16 @@ const main = async () => {
             entityKey,
           })
         },
-        onWeatherChanged: () => {
+        onWeatherChanged: (weatherEntityId) => {
+          // Re-push only the weather-showing devices that resolve to the
+          // entity whose data just changed.
           config.devices
             .filter(
               (device) =>
                 deviceStore.getActiveView(device.id) ===
-                "Clock (Weather)",
+                  "Clock (Weather)" &&
+                resolveWeatherEntityId(device.id) ===
+                  weatherEntityId,
             )
             .forEach((device) => {
               pushDeviceLogged(device.id)
@@ -313,6 +395,19 @@ const main = async () => {
     })
   }
 
+  /** Re-push every device currently showing the weather clock (global weather changed). */
+  const refreshAllWeatherDevices = () => {
+    config.devices
+      .filter(
+        (device) =>
+          deviceStore.getActiveView(device.id) ===
+          "Clock (Weather)",
+      )
+      .forEach((device) => {
+        pushDeviceLogged(device.id)
+      })
+  }
+
   // Immich photo frame: rotates a recency-weighted random photo of the
   // configured people/query on an interval — for devices SHOWING the Photo
   // Frame (selected or idle-fallback). Enabled only when Immich credentials
@@ -326,9 +421,9 @@ const main = async () => {
           url: config.immich.url,
           apiKey: config.immich.apiKey,
         },
-        intervalMinutes: config.immich.intervalMinutes,
-        recencyHalfLifeDays:
-          config.immich.recencyHalfLifeDays,
+        getIntervalMinutes: resolvePhotoIntervalMinutes,
+        getRecencyHalfLifeDays:
+          resolvePhotoRecencyHalfLifeDays,
         devices: config.devices,
         deviceConfigStore,
         viewDataStore,
@@ -436,6 +531,83 @@ const main = async () => {
                 deviceId,
               )
             },
+          },
+        ],
+        [
+          "weatherEntity",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              deviceConfigStore.setWeatherEntity({
+                deviceId,
+                entityId: payload,
+              })
+              return payload
+            },
+            getHasValue: (deviceId) =>
+              Boolean(
+                deviceConfigStore.getWeatherEntity(
+                  deviceId,
+                ),
+              ),
+            onApplied: async (deviceId) => {
+              // Pull the newly-pointed entity's current value, then repaint.
+              nowPlayingAdapter?.refreshWeather()
+              await pushController.pushDevice(deviceId)
+            },
+          },
+        ],
+        [
+          // 0 = inherit the global default (a number entity always has a
+          // value, so 0 is the "unset" sentinel).
+          "photoInterval",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              const minutes = parseBoundedInteger({
+                payload,
+                min: 0,
+                max: 1440,
+              })
+              if (minutes === null) {
+                return null
+              }
+              deviceConfigStore.setPhotoIntervalMinutes({
+                deviceId,
+                minutes,
+              })
+              return String(minutes)
+            },
+            getHasValue: (deviceId) =>
+              deviceConfigStore.getPhotoIntervalMinutes(
+                deviceId,
+              ) !== undefined,
+            // Read live on the next rotation tick — no immediate re-render.
+          },
+        ],
+        [
+          "photoRecency",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              const days = parseBoundedInteger({
+                payload,
+                min: 0,
+                max: 3650,
+              })
+              if (days === null) {
+                return null
+              }
+              deviceConfigStore.setPhotoRecencyHalfLifeDays(
+                {
+                  deviceId,
+                  days,
+                },
+              )
+              return String(days)
+            },
+            getHasValue: (deviceId) =>
+              deviceConfigStore.getPhotoRecencyHalfLifeDays(
+                deviceId,
+              ) !== undefined,
+            // Read live on the next random pick — no immediate re-render.
           },
         ],
         [
@@ -583,6 +755,18 @@ const main = async () => {
           command: topics.agendaCalendarsCommand,
           state: topics.agendaCalendarsState,
         },
+        weatherEntity: {
+          command: topics.weatherEntityCommand,
+          state: topics.weatherEntityState,
+        },
+        photoInterval: {
+          command: topics.photoIntervalCommand,
+          state: topics.photoIntervalState,
+        },
+        photoRecency: {
+          command: topics.photoRecencyCommand,
+          state: topics.photoRecencyState,
+        },
         photoPeople: {
           command: topics.photoPeopleCommand,
           state: topics.photoPeopleState,
@@ -637,15 +821,128 @@ const main = async () => {
         | "photoNext"
         | "photoPrevious"
         | "knob"
-        | "globalAgendaCalendars"
-        | "globalAgendaCalendarsRestore"
-      /** Set when kind is "knob". */
+        | "globalKnob"
+      /** Set when kind is "knob" or "globalKnob". */
       knobKind?: string
       /** True for a knob's retained-state (boot restore) topic. */
       isRestore?: boolean
     }
 
     const globalTopics = buildGlobalTopics(baseTopic)
+
+    // The server-wide ("Inkcast Server" device) config knobs — the household
+    // defaults each display inherits unless it sets its own override. Same
+    // command/retained-state/restore shape as the per-device knobs.
+    type GlobalConfigKnob = {
+      command: string
+      state: string
+      /** Store the (valid) payload; returns the normalized retained-state payload, or null to reject. */
+      applyPayload: (payload: string) => string | null
+      getHasValue: () => boolean
+      /** Re-render / re-fetch after a change or a boot-time restore. */
+      afterChange?: () => void
+      /** Retained-state seed for number knobs (avoids HA showing "unknown"). */
+      seedDefault?: string
+    }
+
+    const globalConfigKnobs: ReadonlyMap<
+      string,
+      GlobalConfigKnob
+    > = new Map([
+      [
+        "agendaCalendars",
+        {
+          command: globalTopics.agendaCalendarsCommand,
+          state: globalTopics.agendaCalendarsState,
+          applyPayload: (payload) => {
+            deviceConfigStore.setGlobalAgendaCalendars(
+              payload,
+            )
+            return payload
+          },
+          getHasValue: () =>
+            Boolean(
+              deviceConfigStore.getGlobalAgendaCalendars(),
+            ),
+          afterChange: refreshAllAgendas,
+        },
+      ],
+      [
+        "weatherEntity",
+        {
+          command: globalTopics.weatherEntityCommand,
+          state: globalTopics.weatherEntityState,
+          applyPayload: (payload) => {
+            deviceConfigStore.setGlobalWeatherEntity(
+              payload,
+            )
+            return payload
+          },
+          getHasValue: () =>
+            Boolean(
+              deviceConfigStore.getGlobalWeatherEntity(),
+            ),
+          afterChange: () => {
+            nowPlayingAdapter?.refreshWeather()
+            refreshAllWeatherDevices()
+          },
+        },
+      ],
+      [
+        "photoInterval",
+        {
+          command: globalTopics.photoIntervalCommand,
+          state: globalTopics.photoIntervalState,
+          applyPayload: (payload) => {
+            const minutes = parseBoundedInteger({
+              payload,
+              min: 1,
+              max: 1440,
+            })
+            if (minutes === null) {
+              return null
+            }
+            deviceConfigStore.setGlobalPhotoIntervalMinutes(
+              minutes,
+            )
+            return String(minutes)
+          },
+          getHasValue: () =>
+            deviceConfigStore.getGlobalPhotoIntervalMinutes() !==
+            undefined,
+          seedDefault: String(
+            DEFAULT_PHOTO_INTERVAL_MINUTES,
+          ),
+        },
+      ],
+      [
+        "photoRecency",
+        {
+          command: globalTopics.photoRecencyCommand,
+          state: globalTopics.photoRecencyState,
+          applyPayload: (payload) => {
+            const days = parseBoundedInteger({
+              payload,
+              min: 1,
+              max: 3650,
+            })
+            if (days === null) {
+              return null
+            }
+            deviceConfigStore.setGlobalPhotoRecencyHalfLifeDays(
+              days,
+            )
+            return String(days)
+          },
+          getHasValue: () =>
+            deviceConfigStore.getGlobalPhotoRecencyHalfLifeDays() !==
+            undefined,
+          seedDefault: String(
+            DEFAULT_PHOTO_RECENCY_HALF_LIFE_DAYS,
+          ),
+        },
+      ],
+    ])
 
     const commandRoutes = new Map<string, TopicRoute>()
     config.devices.forEach((device) => {
@@ -694,17 +991,25 @@ const main = async () => {
       })
     })
 
-    // Global "Agenda: Calendars" (Inkcast Server device): the household default
-    // used by any display whose own calendars are empty. Retained state doubles
-    // as boot-time restore.
-    commandRoutes.set(globalTopics.agendaCalendarsCommand, {
-      deviceId: "",
-      kind: "globalAgendaCalendars",
-    })
-    commandRoutes.set(globalTopics.agendaCalendarsState, {
-      deviceId: "",
-      kind: "globalAgendaCalendarsRestore",
-    })
+    // Server-wide ("Inkcast Server" device) knobs: the household defaults any
+    // display inherits unless it overrides them. Retained state doubles as
+    // boot-time restore.
+    Array.from(globalConfigKnobs.entries()).forEach(
+      ([knobKind, globalKnob]) => {
+        commandRoutes.set(globalKnob.command, {
+          deviceId: "",
+          kind: "globalKnob",
+          knobKind,
+          isRestore: false,
+        })
+        commandRoutes.set(globalKnob.state, {
+          deviceId: "",
+          kind: "globalKnob",
+          knobKind,
+          isRestore: true,
+        })
+      },
+    )
 
     await publisher.subscribe({
       topics: Array.from(commandRoutes.keys()),
@@ -718,29 +1023,35 @@ const main = async () => {
           await pushController.pushDevice(route.deviceId)
           return
         }
-        if (route.kind === "globalAgendaCalendars") {
-          deviceConfigStore.setGlobalAgendaCalendars(
-            payload,
-          )
+        if (route.kind === "globalKnob") {
+          const globalKnob = route.knobKind
+            ? globalConfigKnobs.get(route.knobKind)
+            : undefined
+          if (!globalKnob) {
+            return
+          }
+          if (route.isRestore) {
+            // Boot-time restore from the retained state topic (only if nothing
+            // set this run).
+            if (
+              !globalKnob.getHasValue() &&
+              globalKnob.applyPayload(payload) !== null
+            ) {
+              globalKnob.afterChange?.()
+            }
+            return
+          }
+          const normalizedPayload =
+            globalKnob.applyPayload(payload)
+          if (normalizedPayload === null) {
+            return
+          }
           await publisher.publish({
-            topic: globalTopics.agendaCalendarsState,
-            payload,
+            topic: globalKnob.state,
+            payload: normalizedPayload,
             isRetained: true,
           })
-          refreshAllAgendas()
-          return
-        }
-        if (route.kind === "globalAgendaCalendarsRestore") {
-          // Boot-time restore from the retained state topic (only if nothing
-          // set this run).
-          if (
-            !deviceConfigStore.getGlobalAgendaCalendars()
-          ) {
-            deviceConfigStore.setGlobalAgendaCalendars(
-              payload,
-            )
-            refreshAllAgendas()
-          }
+          globalKnob.afterChange?.()
           return
         }
         if (route.kind === "view") {
@@ -937,6 +1248,23 @@ const main = async () => {
               }) !== undefined,
             payload: "0",
           })),
+          // Per-device Photo Frame overrides default to 0 (= inherit global).
+          {
+            kind: "photoInterval",
+            hasValue:
+              deviceConfigStore.getPhotoIntervalMinutes(
+                device.id,
+              ) !== undefined,
+            payload: "0",
+          },
+          {
+            kind: "photoRecency",
+            hasValue:
+              deviceConfigStore.getPhotoRecencyHalfLifeDays(
+                device.id,
+              ) !== undefined,
+            payload: "0",
+          },
         ]
         seedPairs
           .filter((seedPair) => !seedPair.hasValue)
@@ -953,6 +1281,33 @@ const main = async () => {
               .catch(() => {})
           })
       })
+
+      // Seed the server-wide number knobs (Inkcast Server device) so HA shows
+      // a concrete default instead of "unknown".
+      Array.from(globalConfigKnobs.values())
+        .filter(
+          (
+            globalKnob,
+          ): globalKnob is GlobalConfigKnob & {
+            seedDefault: string
+          } =>
+            globalKnob.seedDefault !== undefined &&
+            !globalKnob.getHasValue(),
+        )
+        .forEach((globalKnob) => {
+          publisher
+            .publish({
+              topic: globalKnob.state,
+              payload: globalKnob.seedDefault,
+              isRetained: true,
+            })
+            .catch(() => {})
+        })
+
+      // Now that retained weather config has restored, pull the current value
+      // of every configured weather entity (the initial HA snapshot may have
+      // predated the restore).
+      nowPlayingAdapter?.refreshWeather()
     }, 5_000)
   }
 

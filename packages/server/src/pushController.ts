@@ -41,6 +41,7 @@ export const createPushController = ({
   renderService,
   publisher,
   baseTopic,
+  resolveWeatherEntityId,
 }: {
   devices: readonly ConfiguredDevice[]
   deviceStore: DeviceStore
@@ -49,6 +50,8 @@ export const createPushController = ({
   renderService: RenderService
   publisher: MqttPublisher
   baseTopic: string
+  /** The device's resolved weather entity id (per-device override or global). */
+  resolveWeatherEntityId: (deviceId: string) => string
 }): PushController => {
   const deviceById = new Map(
     devices.map((device) => [device.id, device]),
@@ -131,7 +134,9 @@ export const createPushController = ({
         getNowPlayingKey(device),
       ),
       photoFrame: viewDataStore.getPhotoFrame(deviceId),
-      weather: viewDataStore.getWeather(),
+      weather: viewDataStore.getWeather(
+        resolveWeatherEntityId(deviceId),
+      ),
       agenda: viewDataStore.getAgenda(deviceId),
       ...(hasAdjustments
         ? {

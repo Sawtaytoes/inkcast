@@ -47,6 +47,48 @@ export type DeviceConfigStore = {
   /** Global default agenda calendars (Inkcast Server device), used when a device's own is empty. */
   getGlobalAgendaCalendars: () => string
   setGlobalAgendaCalendars: (calendarsText: string) => void
+  /**
+   * Per-device HA `weather` entity id feeding the `Clock (Weather)` view.
+   * Empty = fall back to the global default below.
+   */
+  getWeatherEntity: (deviceId: string) => string
+  setWeatherEntity: (params: {
+    deviceId: string
+    entityId: string
+  }) => void
+  /** Global default weather entity (Inkcast Server device); used when a device's own is empty. */
+  getGlobalWeatherEntity: () => string
+  setGlobalWeatherEntity: (entityId: string) => void
+  /**
+   * Per-device Photo Frame rotation interval, minutes. `undefined` (or 0, the
+   * "inherit" sentinel HA sends) = fall back to the global default below.
+   */
+  getPhotoIntervalMinutes: (
+    deviceId: string,
+  ) => number | undefined
+  setPhotoIntervalMinutes: (params: {
+    deviceId: string
+    minutes: number
+  }) => void
+  /** Global default Photo Frame rotation interval, minutes. */
+  getGlobalPhotoIntervalMinutes: () => number | undefined
+  setGlobalPhotoIntervalMinutes: (minutes: number) => void
+  /**
+   * Per-device Photo Frame recency half-life, days. `undefined` (or 0, the
+   * "inherit" sentinel) = fall back to the global default below.
+   */
+  getPhotoRecencyHalfLifeDays: (
+    deviceId: string,
+  ) => number | undefined
+  setPhotoRecencyHalfLifeDays: (params: {
+    deviceId: string
+    days: number
+  }) => void
+  /** Global default Photo Frame recency half-life, days. */
+  getGlobalPhotoRecencyHalfLifeDays: () =>
+    | number
+    | undefined
+  setGlobalPhotoRecencyHalfLifeDays: (days: number) => void
   /** Free-text Immich smart-search query for the Photo Frame ("" = off). */
   getPhotoQuery: (deviceId: string) => string
   setPhotoQuery: (params: {
@@ -108,6 +150,27 @@ export const createDeviceConfigStore =
       "global",
       string
     >()
+    const weatherEntityByDeviceId = new Map<
+      string,
+      string
+    >()
+    const globalWeatherEntityHolder = new Map<
+      "global",
+      string
+    >()
+    const photoIntervalByDeviceId = new Map<
+      string,
+      number
+    >()
+    const globalPhotoIntervalHolder = new Map<
+      "global",
+      number
+    >()
+    const photoRecencyByDeviceId = new Map<string, number>()
+    const globalPhotoRecencyHolder = new Map<
+      "global",
+      number
+    >()
     const ditherByDeviceId = new Map<
       string,
       DitherAlgorithm
@@ -147,6 +210,36 @@ export const createDeviceConfigStore =
           "global",
           calendarsText,
         )
+      },
+      getWeatherEntity: (deviceId) =>
+        weatherEntityByDeviceId.get(deviceId) ?? "",
+      setWeatherEntity: ({ deviceId, entityId }) => {
+        weatherEntityByDeviceId.set(deviceId, entityId)
+      },
+      getGlobalWeatherEntity: () =>
+        globalWeatherEntityHolder.get("global") ?? "",
+      setGlobalWeatherEntity: (entityId) => {
+        globalWeatherEntityHolder.set("global", entityId)
+      },
+      getPhotoIntervalMinutes: (deviceId) =>
+        photoIntervalByDeviceId.get(deviceId),
+      setPhotoIntervalMinutes: ({ deviceId, minutes }) => {
+        photoIntervalByDeviceId.set(deviceId, minutes)
+      },
+      getGlobalPhotoIntervalMinutes: () =>
+        globalPhotoIntervalHolder.get("global"),
+      setGlobalPhotoIntervalMinutes: (minutes) => {
+        globalPhotoIntervalHolder.set("global", minutes)
+      },
+      getPhotoRecencyHalfLifeDays: (deviceId) =>
+        photoRecencyByDeviceId.get(deviceId),
+      setPhotoRecencyHalfLifeDays: ({ deviceId, days }) => {
+        photoRecencyByDeviceId.set(deviceId, days)
+      },
+      getGlobalPhotoRecencyHalfLifeDays: () =>
+        globalPhotoRecencyHolder.get("global"),
+      setGlobalPhotoRecencyHalfLifeDays: (days) => {
+        globalPhotoRecencyHolder.set("global", days)
       },
       getDitherAlgorithm: (deviceId) =>
         ditherByDeviceId.get(deviceId),

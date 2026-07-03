@@ -54,7 +54,8 @@ export type AgendaData = {
 
 /**
  * In-memory latest-value store for view data — now-playing keyed by the
- * upstream entity id, photo-frame keyed by device id, weather global.
+ * upstream entity id, photo-frame keyed by device id, weather keyed by its HA
+ * weather entity id (displays can point at different weather entities).
  * Adapters write into it as events arrive; the render path reads from it, so
  * a view switch or manual refresh always renders the freshest known data
  * without waiting for the next upstream event.
@@ -74,8 +75,13 @@ export type ViewDataStore = {
     deviceId: string
     data: PhotoFrameData | undefined
   }) => void
-  getWeather: () => WeatherData | undefined
-  setWeather: (data: WeatherData) => void
+  getWeather: (
+    weatherEntityId: string,
+  ) => WeatherData | undefined
+  setWeather: (params: {
+    weatherEntityId: string
+    data: WeatherData
+  }) => void
   getAgenda: (deviceId: string) => AgendaData | undefined
   setAgenda: (params: {
     deviceId: string
@@ -92,7 +98,7 @@ export const createViewDataStore = (): ViewDataStore => {
     string,
     PhotoFrameData
   >()
-  const weatherHolder = new Map<"current", WeatherData>()
+  const weatherByEntityId = new Map<string, WeatherData>()
   const agendaByDeviceId = new Map<string, AgendaData>()
 
   return {
@@ -110,9 +116,10 @@ export const createViewDataStore = (): ViewDataStore => {
         photoFrameByDeviceId.set(deviceId, data)
       }
     },
-    getWeather: () => weatherHolder.get("current"),
-    setWeather: (data) => {
-      weatherHolder.set("current", data)
+    getWeather: (weatherEntityId) =>
+      weatherByEntityId.get(weatherEntityId),
+    setWeather: ({ weatherEntityId, data }) => {
+      weatherByEntityId.set(weatherEntityId, data)
     },
     getAgenda: (deviceId) => agendaByDeviceId.get(deviceId),
     setAgenda: ({ deviceId, data }) => {

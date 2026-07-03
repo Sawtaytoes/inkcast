@@ -52,6 +52,8 @@ export const observeHomeAssistantEntityStates = ({
   token,
   entityIds,
   followedPlatforms,
+  getExtraWatchedEntityIds = () => [],
+  refreshSignal,
 }: {
   url: string
   token: string
@@ -64,6 +66,19 @@ export const observeHomeAssistantEntityStates = ({
    * the HA-editable exclusion list takes effect without a reconnect.
    */
   followedPlatforms: readonly string[]
+  /**
+   * Extra entity ids to watch, resolved live on every event so an
+   * HA-editable set (e.g. the per-device weather entities) takes effect
+   * without a reconnect. Pair with `refreshSignal` to pull a newly-added
+   * entity's current value promptly instead of waiting for its next change.
+   */
+  getExtraWatchedEntityIds?: () => readonly string[]
+  /**
+   * When this emits, re-request the `get_states` snapshot on the live
+   * connection — used after the extra-watched set grows so the new entities'
+   * current states arrive immediately.
+   */
+  refreshSignal?: Observable<unknown>
 }): Observable<HomeAssistantEntityState> => {
   const pinnedEntityIds = new Set(entityIds)
   const followedPlatformSet = new Set(followedPlatforms)
@@ -79,14 +94,13 @@ export const observeHomeAssistantEntityStates = ({
         webSocket.send(JSON.stringify(message))
       }
 
+      const getIsWatched = (entityId: string) =>
+        pinnedEntityIds.has(entityId) ||
+        followedEntityIds.has(entityId) ||
+        getExtraWatchedEntityIds().includes(entityId)
+
       const emitIfWatched = (wireState: WireState) => {
-        const isFollowCandidate = followedEntityIds.has(
-          wireState.entity_id,
-        )
-        if (
-          !isFollowCandidate &&
-          !pinnedEntityIds.has(wireState.entity_id)
-        ) {
+        if (!getIsWatched(wireState.entity_id)) {
           return
         }
 
@@ -94,21 +108,41 @@ export const observeHomeAssistantEntityStates = ({
           entityId: wireState.entity_id,
           state: wireState.state,
           attributes: wireState.attributes ?? {},
-          isFollowCandidate,
+          isFollowCandidate: followedEntityIds.has(
+            wireState.entity_id,
+          ),
         })
       }
 
-      const requestStatesAndEvents = () => {
+      const requestStates = () => {
         sendMessage({
           id: GET_STATES_MESSAGE_ID,
           type: "get_states",
         })
+      }
+
+      const requestStatesAndEvents = () => {
+        requestStates()
         sendMessage({
           id: SUBSCRIBE_EVENTS_MESSAGE_ID,
           type: "subscribe_events",
           event_type: "state_changed",
         })
       }
+
+      // Re-snapshot on demand (the extra-watched set grew). Only meaningful
+      // once the socket is open + authenticated; a stray pre-auth `get_states`
+      // just returns an error result we already ignore, and the initial
+      // snapshot still runs on `auth_ok`.
+      const refreshSubscription = refreshSignal?.subscribe(
+        () => {
+          if (
+            webSocket.readyState === WebSocketClient.OPEN
+          ) {
+            requestStates()
+          }
+        },
+      )
 
       webSocket.on("message", (data) => {
         const message = JSON.parse(String(data))
@@ -193,6 +227,7 @@ export const observeHomeAssistantEntityStates = ({
       return () => {
         // The close handler may still fire, but errors on an already-closed
         // subscriber are ignored, so this teardown is safe on unsubscribe.
+        refreshSubscription?.unsubscribe()
         webSocket.close()
       }
     },
