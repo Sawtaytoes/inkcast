@@ -3,17 +3,27 @@ import type { CSSProperties } from "react"
 import type { NowPlayingViewProps } from "./viewProps.ts"
 import {
   buildPanelRootStyle,
+  fitText,
   getAccentColour,
+  READABLE_FONT_FLOOR_PX,
 } from "./viewStyles.ts"
 
 /**
- * Now-playing view, editorial variant: typeset like a record sleeve — a
- * letterspaced uppercase eyebrow over a full-width rule, the track title as a
- * heavy hero line, a short accent rule, the artist as a tracked-caps byline,
- * a framed square art plate beside the type, and a solid "spine" bar
- * anchoring the bottom edge. The accent ink means "playing right now" and
- * drops to black for last-played. Inline styles + flexbox only (Satori-safe).
+ * Now-playing view, editorial variant — ARTWORK-FORWARD.
+ *
+ * When the player exposes art (a Plex poster, album cover), the poster is the
+ * hero: it bleeds full-height down one side of the panel with an accent spine,
+ * and the type (kicker + heavy title + byline) sits in the remaining column.
+ * When there is no art (YouTube on the Shield exposes none), the same type
+ * fills the whole panel as a bold typographic poster instead — so the card
+ * never looks empty.
+ *
+ * The title WRAPS (shrink-and-condense-to-fit across a few lines) rather than
+ * truncating at ~15 chars, and the accent ink means "playing right now"
+ * (drops to black for last-played). Inline styles + flexbox only (Satori-safe).
  */
+const ARTIST_PLACEHOLDER = "—"
+
 export const NowPlayingEditorial = ({
   width,
   height,
@@ -29,55 +39,95 @@ export const NowPlayingEditorial = ({
   })
   const statusColour = isPlaying ? accentColour : "#000000"
   const hasArtwork = artworkDataUri !== undefined
+  const trimmedArtist = artist.trim()
+  const hasVisibleArtist =
+    trimmedArtist !== "" &&
+    trimmedArtist !== ARTIST_PLACEHOLDER
 
-  const padding = Math.round(height * 0.075)
+  const readableFloor = READABLE_FONT_FLOOR_PX[colourMode]
 
-  const titleLengthScale =
-    title.length > 26
-      ? 0.13
-      : title.length > 15
-        ? 0.16
-        : 0.2
-  const titleScale = hasArtwork
-    ? titleLengthScale * 0.85
-    : titleLengthScale
-  const titleFontSize = Math.max(
-    17,
-    Math.round(height * titleScale),
-  )
+  // The poster bleeds full-height down the leading edge; the type column takes
+  // the rest. With no art, the type column is the whole panel.
+  const posterPaneWidth = hasArtwork
+    ? Math.round(width * (colourMode === "e6" ? 0.44 : 0.4))
+    : 0
+  const spineThickness = hasArtwork
+    ? Math.max(3, Math.round(width * 0.01))
+    : 0
+  const padding = Math.round(height * 0.08)
 
+  const typeColumnWidth =
+    width - posterPaneWidth - spineThickness
+  const textAvailableWidth = typeColumnWidth - padding * 2
+
+  // The kicker + byline are fixed; the title is the flexible hero. Give it more
+  // lines (and a bigger base) when it stands alone with the whole panel. Base
+  // sizes stay conservative so greedy word-wrap fits within the line budget
+  // rather than clipping at the maxHeight.
   const eyebrowFontSize = Math.max(
-    10,
-    Math.round(height * 0.055),
+    11,
+    Math.round(height * 0.058),
   )
   const artistFontSize = Math.max(
     12,
-    Math.round(height * 0.09),
+    Math.round(height * (hasArtwork ? 0.062 : 0.08)),
   )
+  const titleLineCount = hasArtwork ? 4 : 5
+  const baseTitleFontSize = Math.round(
+    height * (hasArtwork ? 0.115 : 0.135),
+  )
+  const fittedTitle = fitText({
+    baseFontSize: baseTitleFontSize,
+    minimumFontSize: Math.min(
+      baseTitleFontSize,
+      readableFloor,
+    ),
+    availableWidth: textAvailableWidth,
+    text: title,
+    lineCount: titleLineCount,
+  })
 
   const hairlineThickness = Math.max(
     2,
     Math.round(height * 0.006),
   )
-  const spineThickness = Math.max(
-    4,
-    Math.round(height * 0.025),
-  )
   const accentRuleThickness = Math.max(
     3,
-    Math.round(height * 0.012),
+    Math.round(height * 0.014),
   )
-
-  const artworkSide = Math.round(
-    height * (colourMode === "e6" ? 0.66 : 0.55),
-  )
-  const artworkFrameThickness = Math.max(
-    2,
-    Math.round(height * 0.008),
-  )
+  const titleLineHeight = 1.1
 
   const rootStyle: CSSProperties = {
     ...buildPanelRootStyle({ width, height }),
+    flexDirection: "row",
+  }
+
+  const posterPaneStyle: CSSProperties = {
+    display: "flex",
+    width: posterPaneWidth,
+    height: "100%",
+    flexShrink: 0,
+  }
+
+  const posterImageStyle: CSSProperties = {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+  }
+
+  const spineStyle: CSSProperties = {
+    display: "flex",
+    width: spineThickness,
+    height: "100%",
+    flexShrink: 0,
+    backgroundColor: statusColour,
+  }
+
+  const typeColumnStyle: CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    flexGrow: 1,
+    minWidth: 0,
     padding,
     justifyContent: "space-between",
   }
@@ -94,7 +144,7 @@ export const NowPlayingEditorial = ({
     fontWeight: 700,
     letterSpacing: Math.max(
       2,
-      Math.round(eyebrowFontSize * 0.18),
+      Math.round(eyebrowFontSize * 0.2),
     ),
     textTransform: "uppercase",
     color: statusColour,
@@ -105,111 +155,86 @@ export const NowPlayingEditorial = ({
     width: "100%",
     height: hairlineThickness,
     backgroundColor: "#000000",
-    marginTop: Math.round(height * 0.02),
+    marginTop: Math.round(height * 0.025),
   }
 
-  const bodyRowStyle: CSSProperties = {
-    display: "flex",
-    flexDirection: "row",
-    alignItems: "center",
-    flexGrow: 1,
-    width: "100%",
-  }
-
-  const typeColumnStyle: CSSProperties = {
+  // The title block is the optical centre; let it take the slack between the
+  // kicker and the byline.
+  const titleBlockStyle: CSSProperties = {
     display: "flex",
     flexDirection: "column",
-    justifyContent: "center",
     flexGrow: 1,
+    justifyContent: "center",
     minWidth: 0,
   }
 
   const titleStyle: CSSProperties = {
+    display: "flex",
     width: "100%",
-    fontSize: titleFontSize,
+    fontSize: fittedTitle.fontSize,
+    letterSpacing: fittedTitle.letterSpacing,
     fontWeight: 700,
-    lineHeight: 1.08,
-    whiteSpace: "nowrap",
+    lineHeight: titleLineHeight,
     overflow: "hidden",
-    textOverflow: "ellipsis",
+    maxHeight: Math.round(
+      fittedTitle.fontSize *
+        titleLineHeight *
+        titleLineCount,
+    ),
   }
 
   const accentRuleStyle: CSSProperties = {
     display: "flex",
-    width: Math.round(width * 0.12),
+    width: Math.round(typeColumnWidth * 0.28),
     height: accentRuleThickness,
     backgroundColor: statusColour,
-    marginTop: Math.round(height * 0.035),
-    marginBottom: Math.round(height * 0.035),
+    marginTop: Math.round(height * 0.04),
   }
 
   const artistStyle: CSSProperties = {
+    display: "flex",
     width: "100%",
     fontSize: artistFontSize,
     fontWeight: 400,
-    // Modest tracking — heavier tracking truncated short artist names once
-    // the art plate narrowed the measure.
-    letterSpacing: Math.max(
-      1,
-      Math.round(artistFontSize * 0.06),
-    ),
+    letterSpacing: 1,
     textTransform: "uppercase",
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
   }
 
-  const artworkPlateStyle: CSSProperties = {
-    display: "flex",
-    width: artworkSide,
-    height: artworkSide,
-    flexShrink: 0,
-    border: `${artworkFrameThickness}px solid #000000`,
-    marginLeft: Math.round(width * 0.04),
-    boxSizing: "border-box",
-  }
-
-  const artworkImageStyle: CSSProperties = {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-  }
-
-  const spineStyle: CSSProperties = {
-    display: "flex",
-    width: "100%",
-    height: spineThickness,
-    backgroundColor: statusColour,
-  }
-
   return (
     <div style={rootStyle}>
-      <div style={eyebrowRowStyle}>
-        <div style={eyebrowTextStyle}>
-          {isPlaying ? "Now Playing" : "Last Played"}
+      {hasArtwork ? (
+        <div style={posterPaneStyle}>
+          <img
+            alt=""
+            src={artworkDataUri}
+            style={posterImageStyle}
+          />
         </div>
-        <div style={eyebrowRuleStyle} />
-      </div>
+      ) : null}
+      {hasArtwork ? <div style={spineStyle} /> : null}
 
-      <div style={bodyRowStyle}>
-        <div style={typeColumnStyle}>
-          <div style={titleStyle}>{title}</div>
-          <div style={accentRuleStyle} />
-          <div style={artistStyle}>{artist}</div>
-        </div>
-
-        {hasArtwork ? (
-          <div style={artworkPlateStyle}>
-            <img
-              alt=""
-              src={artworkDataUri}
-              style={artworkImageStyle}
-            />
+      <div style={typeColumnStyle}>
+        <div style={eyebrowRowStyle}>
+          <div style={eyebrowTextStyle}>
+            {isPlaying ? "Now Playing" : "Last Played"}
           </div>
+          <div style={eyebrowRuleStyle} />
+        </div>
+
+        <div style={titleBlockStyle}>
+          <div style={titleStyle}>{title}</div>
+          {hasVisibleArtist ? (
+            <div style={accentRuleStyle} />
+          ) : null}
+        </div>
+
+        {hasVisibleArtist ? (
+          <div style={artistStyle}>{artist}</div>
         ) : null}
       </div>
-
-      <div style={spineStyle} />
     </div>
   )
 }
