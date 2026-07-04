@@ -180,11 +180,14 @@ export const renderViewElement = ({
     })
   }
   if (viewName === "Clock (Agenda)") {
-    // Drop events that have already started (matches "revert when it starts"),
-    // then slice to what the panel can legibly hold. Times are formatted per
-    // panel size here so the view stays a pure function of its props.
+    // Drop timed events that have already started (matches "revert when it
+    // starts"), but keep all-day events for their whole day — their start is
+    // midnight, so a start-time filter would wrongly hide them all day. Then
+    // slice to what the panel can legibly hold. Times are formatted per panel
+    // size here so the view stays a pure function of its props.
     const upcomingEvents = (agenda?.events ?? []).filter(
-      (event) => event.startMs >= now.getTime(),
+      (event) =>
+        event.isAllDay || event.startMs >= now.getTime(),
     )
     const maxEvents = isCompactClock
       ? MAX_AGENDA_EVENTS_COMPACT
