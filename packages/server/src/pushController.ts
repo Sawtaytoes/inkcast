@@ -80,6 +80,8 @@ export const createPushController = ({
     // HA-edited display config overrides the registry defaults.
     const ditherOverride =
       deviceConfigStore.getDitherAlgorithm(deviceId)
+    const rotationOverride =
+      deviceConfigStore.getRotationOverride(deviceId)
     const isBlackAndWhite =
       deviceConfigStore.getColourModeOverride(deviceId) ===
       "bw"
@@ -95,6 +97,9 @@ export const createPushController = ({
             colourMode: "mono" as const,
             palette: MONO_PALETTE,
           }
+        : {}),
+      ...(rotationOverride !== undefined
+        ? { rotation: rotationOverride }
         : {}),
       ditherProfile: {
         ...device.ditherProfile,

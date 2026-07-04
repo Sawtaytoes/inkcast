@@ -31,6 +31,7 @@ import {
   CROP_EDGES,
   type CropEdge,
   createDeviceConfigStore,
+  type PanelRotation,
   type PhotoFormat,
   type PhotoFormatSetting,
 } from "./state/deviceConfigStore.ts"
@@ -120,6 +121,22 @@ const PHOTO_FORMAT_OPTION_BY_SETTING: Record<
   jpeg: "JPEG",
   webp: "WebP",
   png: "PNG",
+}
+
+const ROTATION_VALUES: readonly PanelRotation[] = [
+  0, 90, 180, 270,
+]
+
+/** Parse an HA rotation-select payload ("0"/"90"/"180"/"270") to a PanelRotation, or null. */
+const parseRotation = (
+  payload: string,
+): PanelRotation | null => {
+  const value = Number.parseInt(payload, 10)
+  return (
+    ROTATION_VALUES.find(
+      (rotation) => rotation === value,
+    ) ?? null
+  )
 }
 
 /** Parse + clamp an HA number-entity payload ("50".."200", % steps). */
@@ -767,6 +784,29 @@ const main = async () => {
           },
         ],
         [
+          "rotation",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              const rotation = parseRotation(payload)
+              if (rotation === null) {
+                return null
+              }
+              deviceConfigStore.setRotationOverride({
+                deviceId,
+                rotation,
+              })
+              return String(rotation)
+            },
+            getHasValue: (deviceId) =>
+              deviceConfigStore.getRotationOverride(
+                deviceId,
+              ) !== undefined,
+            onApplied: async (deviceId) => {
+              await pushController.pushDevice(deviceId)
+            },
+          },
+        ],
+        [
           "colourMode",
           {
             applyPayload: ({ deviceId, payload }) => {
@@ -918,6 +958,10 @@ const main = async () => {
         dither: {
           command: topics.ditherCommand,
           state: topics.ditherState,
+        },
+        rotation: {
+          command: topics.rotationCommand,
+          state: topics.rotationState,
         },
         colourMode: {
           command: topics.colourModeCommand,
@@ -1398,6 +1442,14 @@ const main = async () => {
               ),
             ),
             payload: device.ditherProfile.algorithm,
+          },
+          {
+            kind: "rotation",
+            hasValue:
+              deviceConfigStore.getRotationOverride(
+                device.id,
+              ) !== undefined,
+            payload: String(device.rotation),
           },
           ...(device.colourMode === "e6"
             ? [

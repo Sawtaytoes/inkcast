@@ -20,6 +20,14 @@ export type PhotoFormat = "jpeg" | "webp" | "png"
 export type PhotoFormatSetting = PhotoFormat | "auto"
 
 /**
+ * Clockwise degrees the server rotates a render before the panel draws it —
+ * the physical mount orientation. Matches `DeviceMetadata.rotation`. Exposed as
+ * a per-device HA config entity so a remounted/upside-down panel is corrected
+ * live without editing the devices file.
+ */
+export type PanelRotation = 0 | 90 | 180 | 270
+
+/**
  * The four edges of a device's safe-area crop inset, in native panel pixels.
  * A physical mat/frame overlaps the panel edges and hides content under it, so
  * text views render inside these insets (white margin); photo views ignore
@@ -141,6 +149,14 @@ export type DeviceConfigStore = {
     deviceId: string
     algorithm: DitherAlgorithm
   }) => void
+  /** Override of the device's registered mount rotation, if any. */
+  getRotationOverride: (
+    deviceId: string,
+  ) => PanelRotation | undefined
+  setRotationOverride: (params: {
+    deviceId: string
+    rotation: PanelRotation
+  }) => void
   getColourModeOverride: (
     deviceId: string,
   ) => ColourModeOverride | undefined
@@ -225,6 +241,10 @@ export const createDeviceConfigStore =
     const ditherByDeviceId = new Map<
       string,
       DitherAlgorithm
+    >()
+    const rotationByDeviceId = new Map<
+      string,
+      PanelRotation
     >()
     const colourModeByDeviceId = new Map<
       string,
@@ -316,6 +336,11 @@ export const createDeviceConfigStore =
         ditherByDeviceId.get(deviceId),
       setDitherAlgorithm: ({ deviceId, algorithm }) => {
         ditherByDeviceId.set(deviceId, algorithm)
+      },
+      getRotationOverride: (deviceId) =>
+        rotationByDeviceId.get(deviceId),
+      setRotationOverride: ({ deviceId, rotation }) => {
+        rotationByDeviceId.set(deviceId, rotation)
       },
       getColourModeOverride: (deviceId) =>
         colourModeByDeviceId.get(deviceId),

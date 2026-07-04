@@ -78,6 +78,8 @@ export const buildDeviceTopics = ({
     photoPreviousCommand: `${base}/photo_previous/set`,
     ditherCommand: `${base}/dither/set`,
     ditherState: `${base}/dither`,
+    rotationCommand: `${base}/rotation/set`,
+    rotationState: `${base}/rotation`,
     colourModeCommand: `${base}/colour_mode/set`,
     colourModeState: `${base}/colour_mode`,
     brightnessCommand: `${base}/brightness/set`,
@@ -125,6 +127,18 @@ export const buildGlobalTopics = (
 export const COLOUR_MODE_OPTIONS = [
   "Color",
   "Black & White",
+] as const
+
+/**
+ * HA-facing panel-rotation option strings (double as MQTT payloads). Clockwise
+ * degrees the server applies before the panel draws — corrects a remounted or
+ * upside-down panel live.
+ */
+export const ROTATION_OPTIONS = [
+  "0",
+  "90",
+  "180",
+  "270",
 ] as const
 
 /**
@@ -241,6 +255,23 @@ export const buildDiscoveryMessages = ({
         options: Array.from(DITHER_ALGORITHMS),
         command_topic: topics.ditherCommand,
         state_topic: topics.ditherState,
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
+      // Mount orientation (clockwise degrees). Correct a remounted / upside-down
+      // panel here — the panel Pi's own INKCAST_ROTATE must stay 0 or rotation
+      // is applied twice.
+      topic: discoveryTopic("select", "rotation"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Display: Rotation",
+        unique_id: `inkcast_${device.id}_rotation`,
+        options: Array.from(ROTATION_OPTIONS),
+        command_topic: topics.rotationCommand,
+        state_topic: topics.rotationState,
         entity_category: "config",
         device: deviceBlock,
       },

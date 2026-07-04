@@ -61,6 +61,7 @@ describe("buildDiscoveryMessages", () => {
       "select", // view
       "button", // refresh
       "select", // Display: Dither
+      "select", // Display: Rotation
       "number", // Display: Brightness
       "number", // Display: Saturation
       "number", // Display: Crop top
@@ -146,6 +147,21 @@ describe("buildDiscoveryMessages", () => {
       "WebP",
       "PNG",
     ])
+  })
+
+  test("the per-device rotation select offers 0/90/180/270", () => {
+    const rotationMessage = messages.find((message) =>
+      message.topic.includes("_rotation/"),
+    )
+    expect(rotationMessage?.payload.options).toEqual([
+      "0",
+      "90",
+      "180",
+      "270",
+    ])
+    expect(rotationMessage?.payload.name).toBe(
+      "Display: Rotation",
+    )
   })
 
   test("every message is retained with a device-scoped unique_id", () => {
