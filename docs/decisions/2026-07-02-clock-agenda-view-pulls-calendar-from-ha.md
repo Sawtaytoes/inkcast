@@ -1,10 +1,14 @@
 # The Clock (Agenda) view pulls calendar events from HA; it does not receive a push
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-07-02
 - **Type:** Architecture / Data flow
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [2026-07-04 Inkcast is a HA-agnostic renderer: HA pushes view data over MQTT; Inkcast never reads HA](2026-07-04-inkcast-renders-ha-pushed-data-not-reads-ha.md)
+
+> **Superseded.** The direction reverses: Inkcast no longer pulls calendar
+> events from HA — HA *pushes* the agenda payload to Inkcast over MQTT, like
+> every other view's data. See the superseding record.
 
 ## Decision
 

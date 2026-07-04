@@ -1,10 +1,14 @@
 # Now-playing data comes from Home Assistant `media_player`, not Music Assistant
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-07-01
 - **Type:** Architecture
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [2026-07-04 Inkcast is a HA-agnostic renderer: HA pushes view data over MQTT; Inkcast never reads HA](2026-07-04-inkcast-renders-ha-pushed-data-not-reads-ha.md)
+
+> **Superseded.** Now-playing data still originates from HA `media_player`, but
+> Inkcast no longer *reads* it — HA computes the payload and *pushes* it to
+> Inkcast over MQTT. Inkcast holds no HA connection. See the superseding record.
 
 ## Decision
 
