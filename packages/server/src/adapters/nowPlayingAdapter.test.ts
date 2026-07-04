@@ -48,6 +48,21 @@ describe("mapHomeAssistantStateToNowPlaying", () => {
     ).toMatchObject({ artist: "Twilight Force" })
   })
 
+  test("strips emoji (tofu on the panel font) and decorative notes from the title", () => {
+    expect(
+      mapHomeAssistantStateToNowPlaying({
+        state: "playing",
+        attributes: {
+          media_artist: "Hidden Pigeon Channel",
+          media_title:
+            "🐦 ALL The Pigeon Books! 📚 | ♫ Hot Dog! ♫",
+        },
+      }),
+    ).toMatchObject({
+      title: "ALL The Pigeon Books! | Hot Dog!",
+    })
+  })
+
   test("returns the idle placeholder when the player has no metadata", () => {
     expect(
       mapHomeAssistantStateToNowPlaying({
