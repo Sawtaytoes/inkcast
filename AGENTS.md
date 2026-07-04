@@ -112,7 +112,12 @@ decisions in this repo is the failure mode to avoid.
 - `yarn test` — Vitest unit tests.
 
 Commit small and often; conventional commits; one logical change per commit.
-**Never** push to the GitHub remote or publish without the maintainer's go-ahead.
+
+**Push as you go — no go-ahead needed.** While this is a **single-maintainer** repo,
+commit each logical change and **push it straight to `master`** so CI rebuilds the
+`:latest` image and TrueNAS/Home Assistant self-update without the maintainer touching
+the server. Don't wait to be asked and don't batch pushes. (If this repo ever gains
+other contributors, revert to a review-before-push flow — supersede this line then.)
 
 ## Package manager
 
