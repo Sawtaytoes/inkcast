@@ -66,6 +66,8 @@ export const buildDeviceTopics = ({
     agendaCalendarsState: `${base}/agenda_calendars`,
     weatherEntityCommand: `${base}/weather_entity/set`,
     weatherEntityState: `${base}/weather_entity`,
+    nowPlayingSourceCommand: `${base}/now_playing_source/set`,
+    nowPlayingSourceState: `${base}/now_playing_source`,
     photoIntervalCommand: `${base}/photo_interval/set`,
     photoIntervalState: `${base}/photo_interval`,
     photoRecencyCommand: `${base}/photo_recency/set`,
@@ -107,6 +109,9 @@ export const buildGlobalTopics = (
   /** Global default HA `weather` entity id. */
   weatherEntityCommand: `${baseTopic}/weather_entity/set`,
   weatherEntityState: `${baseTopic}/weather_entity`,
+  /** Global default now-playing source list (comma-separated media_player entity ids). */
+  nowPlayingSourceCommand: `${baseTopic}/now_playing_source/set`,
+  nowPlayingSourceState: `${baseTopic}/now_playing_source`,
   /** Global default Photo Frame rotation interval, minutes. */
   photoIntervalCommand: `${baseTopic}/photo_interval/set`,
   photoIntervalState: `${baseTopic}/photo_interval`,
@@ -409,6 +414,23 @@ export const buildDiscoveryMessages = ({
       },
     },
     {
+      // Priority-ordered, comma-separated media_player entity ids feeding this
+      // device's now-playing view — the first that is playing wins (e.g. a Plex
+      // integration player before the Shield's cast player). Empty = use the
+      // global default on the Inkcast Server device, then follow mode.
+      topic: discoveryTopic("text", "now_playing_source"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Now Playing: Source",
+        unique_id: `inkcast_${device.id}_now_playing_source`,
+        command_topic: topics.nowPlayingSourceCommand,
+        state_topic: topics.nowPlayingSourceState,
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
       // Per-device Photo Frame rotation interval. 0 = inherit the global
       // default on the Inkcast Server device (a number entity always carries a
       // value, so 0 is the "unset/inherit" sentinel — 0 minutes is meaningless
@@ -600,6 +622,22 @@ export const buildGlobalDiscoveryMessages = (
         unique_id: "inkcast_server_weather_entity",
         command_topic: topics.weatherEntityCommand,
         state_topic: topics.weatherEntityState,
+        entity_category: "config",
+        device: serverDeviceBlock,
+      },
+    },
+    {
+      // Global default now-playing source — the priority-ordered media_player
+      // list every display uses unless it overrides with its own "Now Playing:
+      // Source" text entity. Comma-separated entity ids; retained = persistence.
+      topic: `${discoveryPrefix}/text/${nodeId}/server_now_playing_source/config`,
+      isRetained: true as const,
+      payload: {
+        ...availability,
+        name: "Now Playing: Source",
+        unique_id: "inkcast_server_now_playing_source",
+        command_topic: topics.nowPlayingSourceCommand,
+        state_topic: topics.nowPlayingSourceState,
         entity_category: "config",
         device: serverDeviceBlock,
       },

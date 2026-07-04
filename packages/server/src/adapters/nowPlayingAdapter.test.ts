@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest"
+import type { NowPlayingData } from "../state/viewDataStore.ts"
 import {
   IDLE_NOW_PLAYING,
   mapHomeAssistantStateToNowPlaying,
+  pickPriorityNowPlaying,
   reduceFollowedPlayer,
 } from "./nowPlayingAdapter.ts"
 
@@ -198,5 +200,90 @@ describe("reduceFollowedPlayer", () => {
       },
     )
     expect(accumulator.currentEntityId).toBe(null)
+  })
+})
+
+describe("pickPriorityNowPlaying", () => {
+  // The Kitchen Counter case: Plex first (rich title + poster), the Shield's
+  // cast player second (catches YouTube, no poster).
+  const PLEX = "media_player.plex_family_room_shield"
+  const CAST = "media_player.family_room_shield_cast"
+  const ordered = [PLEX, CAST] as const
+
+  const playing = (title: string): NowPlayingData => ({
+    artist: "—",
+    title,
+    isPlaying: true,
+  })
+  const stopped = (title: string): NowPlayingData => ({
+    artist: "—",
+    title,
+    isPlaying: false,
+  })
+
+  test("the highest-priority playing candidate wins even if a lower one is also playing", () => {
+    const selection = pickPriorityNowPlaying({
+      orderedEntityIds: ordered,
+      dataByEntityId: new Map([
+        [PLEX, playing("Justice League")],
+        [CAST, playing("Pigeon Books")],
+      ]),
+      previousEntityId: null,
+    })
+    expect(selection.entityId).toBe(PLEX)
+    expect(selection.data.title).toBe("Justice League")
+  })
+
+  test("falls through to a lower-priority candidate when the top one is idle (YouTube on the Shield)", () => {
+    const selection = pickPriorityNowPlaying({
+      orderedEntityIds: ordered,
+      dataByEntityId: new Map([
+        [PLEX, IDLE_NOW_PLAYING],
+        [CAST, playing("Pigeon Books")],
+      ]),
+      previousEntityId: null,
+    })
+    expect(selection.entityId).toBe(CAST)
+    expect(selection.data.title).toBe("Pigeon Books")
+  })
+
+  test("stays sticky on the previous winner (Last Played) when nothing is playing", () => {
+    const selection = pickPriorityNowPlaying({
+      orderedEntityIds: ordered,
+      dataByEntityId: new Map([
+        [PLEX, IDLE_NOW_PLAYING],
+        [CAST, stopped("Pigeon Books")],
+      ]),
+      previousEntityId: CAST,
+    })
+    expect(selection.entityId).toBe(CAST)
+    expect(selection.data).toMatchObject({
+      isPlaying: false,
+      title: "Pigeon Books",
+    })
+  })
+
+  test("idle on every candidate yields the idle placeholder", () => {
+    const selection = pickPriorityNowPlaying({
+      orderedEntityIds: ordered,
+      dataByEntityId: new Map([
+        [PLEX, IDLE_NOW_PLAYING],
+        [CAST, IDLE_NOW_PLAYING],
+      ]),
+      previousEntityId: null,
+    })
+    expect(selection.entityId).toBe(null)
+    expect(selection.data).toEqual(IDLE_NOW_PLAYING)
+  })
+
+  test("a candidate with no state yet is skipped", () => {
+    const selection = pickPriorityNowPlaying({
+      orderedEntityIds: ordered,
+      dataByEntityId: new Map([
+        [CAST, playing("Pigeon Books")],
+      ]),
+      previousEntityId: null,
+    })
+    expect(selection.entityId).toBe(CAST)
   })
 })

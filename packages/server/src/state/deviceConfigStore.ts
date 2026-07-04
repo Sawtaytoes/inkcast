@@ -72,6 +72,22 @@ export type DeviceConfigStore = {
   getGlobalWeatherEntity: () => string
   setGlobalWeatherEntity: (entityId: string) => void
   /**
+   * Per-device now-playing source: a comma-separated, priority-ordered list of
+   * `media_player` entity ids feeding this device's now-playing view. The view
+   * shows the first candidate that is playing (e.g. a Plex integration player
+   * before the Shield's cast player, so Plex's poster wins yet YouTube on the
+   * Shield still shows through the cast fallback). Empty = fall back to the
+   * global default below, then to follow mode.
+   */
+  getNowPlayingSource: (deviceId: string) => string
+  setNowPlayingSource: (params: {
+    deviceId: string
+    sourceText: string
+  }) => void
+  /** Global default now-playing source list (Inkcast Server device); used when a device's own is empty. */
+  getGlobalNowPlayingSource: () => string
+  setGlobalNowPlayingSource: (sourceText: string) => void
+  /**
    * Per-device Photo Frame rotation interval, minutes. `undefined` (or 0, the
    * "inherit" sentinel HA sends) = fall back to the global default below.
    */
@@ -196,6 +212,14 @@ export const createDeviceConfigStore =
       "global",
       string
     >()
+    const nowPlayingSourceByDeviceId = new Map<
+      string,
+      string
+    >()
+    const globalNowPlayingSourceHolder = new Map<
+      "global",
+      string
+    >()
     const photoIntervalByDeviceId = new Map<
       string,
       number
@@ -291,6 +315,19 @@ export const createDeviceConfigStore =
         globalWeatherEntityHolder.get("global") ?? "",
       setGlobalWeatherEntity: (entityId) => {
         globalWeatherEntityHolder.set("global", entityId)
+      },
+      getNowPlayingSource: (deviceId) =>
+        nowPlayingSourceByDeviceId.get(deviceId) ?? "",
+      setNowPlayingSource: ({ deviceId, sourceText }) => {
+        nowPlayingSourceByDeviceId.set(deviceId, sourceText)
+      },
+      getGlobalNowPlayingSource: () =>
+        globalNowPlayingSourceHolder.get("global") ?? "",
+      setGlobalNowPlayingSource: (sourceText) => {
+        globalNowPlayingSourceHolder.set(
+          "global",
+          sourceText,
+        )
       },
       getPhotoIntervalMinutes: (deviceId) =>
         photoIntervalByDeviceId.get(deviceId),

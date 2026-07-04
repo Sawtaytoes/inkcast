@@ -204,6 +204,61 @@ const main = async () => {
   const resolveWeatherEntityId = (deviceId: string) =>
     deviceConfigStore.getWeatherEntity(deviceId) ||
     deviceConfigStore.getGlobalWeatherEntity()
+
+  // Now-playing source: a per-device (or global-default) priority-ordered list
+  // of media_player entity ids, HA config. The env/devices-file
+  // `nowPlayingEntityId` survives only as a seed default. A device with a
+  // resolved list reads its own priority winner (keyed by deviceId); an empty
+  // list means follow mode.
+  const nowPlayingSeedByDeviceId = new Map(
+    config.devices.map((device) => [
+      device.id,
+      device.nowPlayingEntityId,
+    ]),
+  )
+  const parseEntityList = (
+    text: string,
+  ): readonly string[] => {
+    const seen = new Set<string>()
+    const entityIds: string[] = []
+    for (const rawEntityId of text.split(",")) {
+      const entityId = rawEntityId.trim()
+      if (entityId && !seen.has(entityId)) {
+        seen.add(entityId)
+        entityIds.push(entityId)
+      }
+    }
+    return entityIds
+  }
+  const resolveNowPlayingSources = (
+    deviceId: string,
+  ): readonly string[] => {
+    const configured =
+      deviceConfigStore.getNowPlayingSource(deviceId) ||
+      deviceConfigStore.getGlobalNowPlayingSource()
+    const configuredList = parseEntityList(configured)
+    if (configuredList.length > 0) {
+      return configuredList
+    }
+    const seed = nowPlayingSeedByDeviceId.get(deviceId)
+    return seed ? [seed] : []
+  }
+  const resolveNowPlayingKey = (deviceId: string) =>
+    resolveNowPlayingSources(deviceId).length > 0
+      ? deviceId
+      : FOLLOWED_NOW_PLAYING_KEY
+  const getNowPlayingSourcesByDevice = () =>
+    new Map(
+      config.devices
+        .map((device): [string, readonly string[]] => [
+          device.id,
+          resolveNowPlayingSources(device.id),
+        ])
+        .filter(
+          ([, orderedEntityIds]) =>
+            orderedEntityIds.length > 0,
+        ),
+    )
   const resolvePhotoIntervalMinutes = (
     deviceId: string,
   ) => {
@@ -283,6 +338,7 @@ const main = async () => {
     publisher,
     baseTopic,
     resolveWeatherEntityId,
+    resolveNowPlayingKey,
     resolvePhotoEncoding,
   })
 
@@ -311,8 +367,7 @@ const main = async () => {
             deviceStore.getActiveView(device.id),
           ) &&
           (entityKey === undefined ||
-            (device.nowPlayingEntityId ??
-              FOLLOWED_NOW_PLAYING_KEY) === entityKey),
+            resolveNowPlayingKey(device.id) === entityKey),
       )
       .forEach((device) => {
         pushDeviceLogged(device.id)
@@ -320,26 +375,16 @@ const main = async () => {
   }
 
   // Phase-2 now-playing adapter: stream media_player entities from Home
-  // Assistant and re-push affected devices on change. Devices with a pinned
-  // nowPlayingEntityId watch that entity; devices without one follow the
-  // most recently active player from the followed platforms (which players
-  // are followed vs. ignored is an HA-automation concern). The same
+  // Assistant and re-push affected devices on change. Devices with a resolved
+  // now-playing source list read their own priority winner; devices without one
+  // follow the most recently active player from the followed platforms (which
+  // players are followed vs. ignored is an HA-automation concern). The same
   // connection streams the weather entity for the clock views. Disabled
   // unless HOME_ASSISTANT_URL + HOME_ASSISTANT_TOKEN are set.
-  const pinnedEntityIds = Array.from(
-    new Set(
-      config.devices
-        .map((device) => device.nowPlayingEntityId)
-        .filter(
-          (
-            candidateEntityId,
-          ): candidateEntityId is string =>
-            Boolean(candidateEntityId),
-        ),
-    ),
-  )
-  const hasUnpinnedDevice = config.devices.some(
-    (device) => !device.nowPlayingEntityId,
+  const hasFollowDevice = config.devices.some(
+    (device) =>
+      resolveNowPlayingKey(device.id) ===
+      FOLLOWED_NOW_PLAYING_KEY,
   )
   const hasNowPlayingAdapter = Boolean(
     config.homeAssistant.url && config.homeAssistant.token,
@@ -348,10 +393,10 @@ const main = async () => {
     ? createNowPlayingAdapter({
         homeAssistantUrl: config.homeAssistant.url,
         homeAssistantToken: config.homeAssistant.token,
-        pinnedEntityIds,
-        followedPlatforms: hasUnpinnedDevice
+        followedPlatforms: hasFollowDevice
           ? config.homeAssistant.followedPlatforms
           : [],
+        getNowPlayingSourcesByDevice,
         getWeatherEntityIds,
         viewDataStore,
         onNowPlayingChanged: (entityKey) => {
@@ -469,6 +514,19 @@ const main = async () => {
         (device) =>
           deviceStore.getActiveView(device.id) ===
           "Clock (Weather)",
+      )
+      .forEach((device) => {
+        pushDeviceLogged(device.id)
+      })
+  }
+
+  /** Re-push every device showing a now-playing view (global source changed). */
+  const refreshAllNowPlayingDevices = () => {
+    config.devices
+      .filter((device) =>
+        getIsNowPlayingView(
+          deviceStore.getActiveView(device.id),
+        ),
       )
       .forEach((device) => {
         pushDeviceLogged(device.id)
@@ -632,6 +690,30 @@ const main = async () => {
             onApplied: async (deviceId) => {
               // Pull the newly-pointed entity's current value, then repaint.
               nowPlayingAdapter?.refreshWeather()
+              await pushController.pushDevice(deviceId)
+            },
+          },
+        ],
+        [
+          "nowPlayingSource",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              deviceConfigStore.setNowPlayingSource({
+                deviceId,
+                sourceText: payload,
+              })
+              return payload
+            },
+            getHasValue: (deviceId) =>
+              Boolean(
+                deviceConfigStore.getNowPlayingSource(
+                  deviceId,
+                ),
+              ),
+            onApplied: async (deviceId) => {
+              // Watch any newly-listed candidate and pull its current state,
+              // then repaint from the new priority winner.
+              nowPlayingAdapter?.refreshSources()
               await pushController.pushDevice(deviceId)
             },
           },
@@ -891,6 +973,10 @@ const main = async () => {
           command: topics.weatherEntityCommand,
           state: topics.weatherEntityState,
         },
+        nowPlayingSource: {
+          command: topics.nowPlayingSourceCommand,
+          state: topics.nowPlayingSourceState,
+        },
         photoInterval: {
           command: topics.photoIntervalCommand,
           state: topics.photoIntervalState,
@@ -1025,6 +1111,27 @@ const main = async () => {
           afterChange: () => {
             nowPlayingAdapter?.refreshWeather()
             refreshAllWeatherDevices()
+          },
+        },
+      ],
+      [
+        "nowPlayingSource",
+        {
+          command: globalTopics.nowPlayingSourceCommand,
+          state: globalTopics.nowPlayingSourceState,
+          applyPayload: (payload) => {
+            deviceConfigStore.setGlobalNowPlayingSource(
+              payload,
+            )
+            return payload
+          },
+          getHasValue: () =>
+            Boolean(
+              deviceConfigStore.getGlobalNowPlayingSource(),
+            ),
+          afterChange: () => {
+            nowPlayingAdapter?.refreshSources()
+            refreshAllNowPlayingDevices()
           },
         },
       ],

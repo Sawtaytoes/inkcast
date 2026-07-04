@@ -1,6 +1,5 @@
 import { MONO_PALETTE } from "@inkcast/core/panels/palette"
 import type { FullColourEncoding } from "@inkcast/core/pipeline/dither"
-import { FOLLOWED_NOW_PLAYING_KEY } from "./adapters/nowPlayingAdapter.ts"
 import type { ConfiguredDevice } from "./config/env.ts"
 import { buildDeviceTopics } from "./homeAssistant/discovery.ts"
 import type { MqttPublisher } from "./mqtt/publisher.ts"
@@ -43,6 +42,7 @@ export const createPushController = ({
   publisher,
   baseTopic,
   resolveWeatherEntityId,
+  resolveNowPlayingKey,
   resolvePhotoEncoding,
 }: {
   devices: readonly ConfiguredDevice[]
@@ -54,6 +54,11 @@ export const createPushController = ({
   baseTopic: string
   /** The device's resolved weather entity id (per-device override or global). */
   resolveWeatherEntityId: (deviceId: string) => string
+  /**
+   * The view-data-store key a device reads its now-playing data from: its own
+   * deviceId when it has a configured source list, else the followed-player key.
+   */
+  resolveNowPlayingKey: (deviceId: string) => string
   /**
    * The device's resolved full-colour wire format (per-device override or
    * global default, both HA config). Only the bleed photo view uses it; every
@@ -67,9 +72,6 @@ export const createPushController = ({
   const deviceById = new Map(
     devices.map((device) => [device.id, device]),
   )
-
-  const getNowPlayingKey = (device: ConfiguredDevice) =>
-    device.nowPlayingEntityId ?? FOLLOWED_NOW_PLAYING_KEY
 
   const renderDevice = async (deviceId: string) => {
     const device = deviceById.get(deviceId)
@@ -147,9 +149,10 @@ export const createPushController = ({
     return renderService.renderDevice({
       device: effectiveDevice,
       viewName: activeView,
-      // Unpinned devices follow the household's active player.
+      // Source-configured devices read their own priority winner (keyed by
+      // deviceId); the rest follow the household's active player.
       nowPlaying: viewDataStore.getNowPlaying(
-        getNowPlayingKey(device),
+        resolveNowPlayingKey(deviceId),
       ),
       photoFrame: viewDataStore.getPhotoFrame(deviceId),
       weather: viewDataStore.getWeather(

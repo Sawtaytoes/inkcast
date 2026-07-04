@@ -228,6 +228,83 @@ export const reduceFollowedPlayer = (
   }
 }
 
+type PrioritySelection = {
+  entityId: string | null
+  data: NowPlayingData
+}
+
+const EMPTY_PRIORITY_SELECTION: PrioritySelection = {
+  entityId: null,
+  data: IDLE_NOW_PLAYING,
+}
+
+/**
+ * Picks a device's now-playing data from its priority-ordered candidate list:
+ *
+ *   1. The highest-priority candidate that is actively `playing` wins — so a
+ *      Plex integration player (listed first) takes over from the Shield's cast
+ *      player the moment Plex starts, keeping Plex's title + poster.
+ *   2. If nothing is playing, stay on the previous winner while it still has
+ *      metadata (sticky "Last Played", so the panel doesn't blink to idle
+ *      between tracks).
+ *   3. Otherwise show the first candidate that has any metadata, else idle.
+ *
+ * Pure and order-sensitive — `orderedEntityIds` is the user's priority list.
+ */
+export const pickPriorityNowPlaying = ({
+  orderedEntityIds,
+  dataByEntityId,
+  previousEntityId,
+}: {
+  orderedEntityIds: readonly string[]
+  dataByEntityId: ReadonlyMap<string, NowPlayingData>
+  previousEntityId: string | null
+}): PrioritySelection => {
+  const playingEntityId = orderedEntityIds.find(
+    (entityId) => dataByEntityId.get(entityId)?.isPlaying,
+  )
+  if (playingEntityId) {
+    return {
+      entityId: playingEntityId,
+      data:
+        dataByEntityId.get(playingEntityId) ??
+        IDLE_NOW_PLAYING,
+    }
+  }
+
+  if (
+    previousEntityId &&
+    orderedEntityIds.includes(previousEntityId)
+  ) {
+    const previousData = dataByEntityId.get(
+      previousEntityId,
+    )
+    if (previousData && previousData !== IDLE_NOW_PLAYING) {
+      return {
+        entityId: previousEntityId,
+        data: previousData,
+      }
+    }
+  }
+
+  const metadataEntityId = orderedEntityIds.find(
+    (entityId) => {
+      const data = dataByEntityId.get(entityId)
+      return data && data !== IDLE_NOW_PLAYING
+    },
+  )
+  if (metadataEntityId) {
+    return {
+      entityId: metadataEntityId,
+      data:
+        dataByEntityId.get(metadataEntityId) ??
+        IDLE_NOW_PLAYING,
+    }
+  }
+
+  return EMPTY_PRIORITY_SELECTION
+}
+
 /**
  * The Phase-2 now-playing data adapter: streams `media_player` states over
  * the HA WebSocket, and whenever a pinned entity's data — or the
@@ -239,8 +316,8 @@ export const reduceFollowedPlayer = (
 export const createNowPlayingAdapter = ({
   homeAssistantUrl,
   homeAssistantToken,
-  pinnedEntityIds,
   followedPlatforms,
+  getNowPlayingSourcesByDevice = () => new Map(),
   getWeatherEntityIds = () => [],
   viewDataStore,
   onNowPlayingChanged,
@@ -248,8 +325,18 @@ export const createNowPlayingAdapter = ({
 }: {
   homeAssistantUrl: string
   homeAssistantToken: string
-  pinnedEntityIds: readonly string[]
   followedPlatforms: readonly string[]
+  /**
+   * Per-device now-playing source: deviceId → its priority-ordered candidate
+   * `media_player` entity ids. Resolved live so an HA config edit takes effect
+   * without a reconnect. Every listed entity is watched; a device's view shows
+   * the first candidate that is playing (see `pickPriorityNowPlaying`), keyed
+   * in the view-data store by its deviceId. Devices absent here follow mode.
+   */
+  getNowPlayingSourcesByDevice?: () => ReadonlyMap<
+    string,
+    readonly string[]
+  >
   /**
    * The HA `weather` entity ids to stream for the clock views, resolved live
    * (the union of every device's configured weather entity). Empty = off.
@@ -259,17 +346,36 @@ export const createNowPlayingAdapter = ({
   onNowPlayingChanged: (entityKey: string) => void
   onWeatherChanged?: (weatherEntityId: string) => void
 }) => {
-  // Re-pull the HA snapshot after the weather set grows so a just-configured
-  // weather entity shows its current value without waiting for its next change.
-  const weatherRefreshSubject = new Subject<void>()
+  // Re-pull the HA snapshot after a watched set grows (a just-configured
+  // weather entity or now-playing source) so it reports its current value
+  // without waiting for its next change.
+  const snapshotRefreshSubject = new Subject<void>()
+
+  // The flattened, deduped union of every device's source candidates.
+  const getSourceCandidateEntityIds =
+    (): readonly string[] => {
+      const entityIds = new Set<string>()
+      for (const orderedEntityIds of getNowPlayingSourcesByDevice().values()) {
+        for (const entityId of orderedEntityIds) {
+          entityIds.add(entityId)
+        }
+      }
+      return Array.from(entityIds)
+    }
+
+  const getExtraWatchedEntityIds =
+    (): readonly string[] => [
+      ...getWeatherEntityIds(),
+      ...getSourceCandidateEntityIds(),
+    ]
 
   const entityStates = observeHomeAssistantEntityStates({
     url: homeAssistantUrl,
     token: homeAssistantToken,
-    entityIds: pinnedEntityIds,
+    entityIds: [],
     followedPlatforms,
-    getExtraWatchedEntityIds: getWeatherEntityIds,
-    refreshSignal: weatherRefreshSubject,
+    getExtraWatchedEntityIds,
+    refreshSignal: snapshotRefreshSubject,
   }).pipe(share())
 
   const updates = entityStates
@@ -332,17 +438,51 @@ export const createNowPlayingAdapter = ({
       onWeatherChanged(weatherEntityId)
     })
 
-  const pinnedEntityIdSet = new Set(pinnedEntityIds)
-  const pinnedUpdates = updates.pipe(
+  // Every source candidate's latest now-playing data, accumulated so each
+  // device can pick its priority winner from a full snapshot.
+  const sourceCandidateData = updates.pipe(
     filter((update) =>
-      pinnedEntityIdSet.has(update.entityId),
+      getSourceCandidateEntityIds().includes(
+        update.entityId,
+      ),
     ),
-    groupBy((update) => update.entityId),
-    mergeMap((entityUpdates) =>
-      entityUpdates.pipe(
-        map((update) => ({
-          entityKey: update.entityId,
-          data: update.data,
+    scan(
+      (dataByEntityId, update) =>
+        new Map(dataByEntityId).set(
+          update.entityId,
+          update.data,
+        ),
+      new Map<string, NowPlayingData>(),
+    ),
+    share(),
+  )
+
+  // Per configured device: its priority winner, keyed in the store by deviceId.
+  const deviceSourceUpdates = sourceCandidateData.pipe(
+    mergeMap((dataByEntityId) =>
+      Array.from(
+        getNowPlayingSourcesByDevice().entries(),
+      ).map(([deviceId, orderedEntityIds]) => ({
+        deviceId,
+        orderedEntityIds,
+        dataByEntityId,
+      })),
+    ),
+    groupBy((item) => item.deviceId),
+    mergeMap((deviceItems) =>
+      deviceItems.pipe(
+        scan(
+          (selection, item) =>
+            pickPriorityNowPlaying({
+              orderedEntityIds: item.orderedEntityIds,
+              dataByEntityId: item.dataByEntityId,
+              previousEntityId: selection.entityId,
+            }),
+          EMPTY_PRIORITY_SELECTION,
+        ),
+        map((selection) => ({
+          entityKey: deviceItems.key,
+          data: selection.data,
         })),
         distinctUntilChanged(
           (previous, current) =>
@@ -373,7 +513,10 @@ export const createNowPlayingAdapter = ({
     debounceTime(DEBOUNCE_MILLISECONDS),
   )
 
-  const subscription = merge(pinnedUpdates, followedUpdates)
+  const subscription = merge(
+    deviceSourceUpdates,
+    followedUpdates,
+  )
     .pipe(
       // Resolve the artwork AFTER dedupe/debounce so each track change costs
       // at most one HA fetch (cached by picture path).
@@ -405,12 +548,19 @@ export const createNowPlayingAdapter = ({
      * report their current value now (call after a weather-entity config change).
      */
     refreshWeather: () => {
-      weatherRefreshSubject.next()
+      snapshotRefreshSubject.next()
+    },
+    /**
+     * Re-pull the HA snapshot so a newly-added now-playing source candidate
+     * reports its current value now (call after a source config change).
+     */
+    refreshSources: () => {
+      snapshotRefreshSubject.next()
     },
     close: () => {
       subscription.unsubscribe()
       weatherSubscription.unsubscribe()
-      weatherRefreshSubject.complete()
+      snapshotRefreshSubject.complete()
     },
   }
 }

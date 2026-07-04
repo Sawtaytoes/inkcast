@@ -7,6 +7,7 @@ proposing a change; a settled decision here overrides default instinct.
 
 | Date | Decision | Status |
 | --- | --- | --- |
+| 2026-07-04 | [The now-playing source is an HA config entity: a per-device priority-ordered media_player list](2026-07-04-now-playing-source-is-ha-config-priority-list.md) | Accepted |
 | 2026-07-03 | [The full-colour photo frame ships JPEG, not WebP, because the panel Pi is ARMv6](2026-07-03-photo-frame-jpeg-not-webp-on-armv6.md) | Accepted |
 | 2026-07-03 | [ESPHome clients pull images over HTTP via ephemeral single-use token URLs (evict after full flush)](2026-07-03-esphome-http-image-delivery.md) | Accepted |
 | 2026-07-03 | [User-tunable view settings are HA/MQTT config entities (global + per-device), never env vars](2026-07-03-user-tunable-view-settings-are-ha-config-entities.md) | Accepted |
