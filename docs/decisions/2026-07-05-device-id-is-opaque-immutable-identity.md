@@ -10,18 +10,20 @@
 
 A device's `id` (the config field that becomes the MQTT topic base `inkcast/<id>/…`,
 the HA discovery `identifiers: inkcast_<id>`, and every entity `unique_id:
-inkcast_<id>_…`) is an **opaque, meaningless, write-once slug** — e.g. `inky-07769e`.
+inkcast_<id>_…`) is an **opaque, meaningless, write-once slug** — e.g. `eink-07769e`.
 
 - It **must not** encode location (`kitchen-counter`) or model/size (`impression-13.3`).
+- **The Pi's OS hostname is set to the same `eink-<hex>` value** — one identity for the
+  host (SSH/DNS) and the MQTT topic base. No separate hostname scheme to keep in sync.
 - Human presentation — friendly name, area/room — is applied **in Home Assistant**
-  (entity-registry name override + area), never in the `id` and never in the MQTT
-  topic hierarchy.
+  (entity-registry name override + area) and, for the device on the network, via a
+  **UniFi client alias**; never in the `id` and never in the MQTT topic hierarchy.
 - Topic structure stays `inkcast/<opaque-id>/<facet>[/set]`; the per-facet sub-topics
   carry all the hierarchy we need. Do not add location/model levels to the topic tree.
 
-Suggested slug format: an `inky-` prefix (keeps topics namespaced/greppable) + a short
-random hex suffix. Random, not MAC-derived — swapping a Pi's SD card shouldn't mint a
-new identity.
+Slug format: an `eink-` prefix (keeps topics namespaced/greppable and reads as "e-ink") +
+a short random hex suffix. Random, not MAC-derived — swapping a Pi's SD card shouldn't mint
+a new identity.
 
 ## Context
 
