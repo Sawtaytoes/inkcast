@@ -6,7 +6,6 @@ import {
 } from "@inkcast/core/devices/device"
 import { createChromiumEngine } from "@inkcast/render/chromiumEngine"
 import { NowPlayingDashboard } from "@inkcast/views/NowPlayingDashboard"
-import { NowPlayingEditorial } from "@inkcast/views/NowPlayingEditorial"
 import { NowPlayingPoster } from "@inkcast/views/NowPlayingPoster"
 import { createElement } from "react"
 import sharp from "sharp"
@@ -35,7 +34,6 @@ const OUTPUT_DIRECTORY = join(
 
 const VIEWS = [
   { key: "dashboard", component: NowPlayingDashboard },
-  { key: "editorial", component: NowPlayingEditorial },
   { key: "poster", component: NowPlayingPoster },
 ] as const
 
