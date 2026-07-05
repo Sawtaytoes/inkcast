@@ -58,14 +58,16 @@ export const buildDeviceTopics = ({
     viewCommand: `${base}/view/set`,
     viewState: `${base}/view`,
     lastRender: `${base}/last_render`,
+    // View data HA pushes to this display (retained). Inkcast renders what it's
+    // handed; it never reads HA. See docs/decisions/
+    // 2026-07-04-inkcast-renders-ha-pushed-data-not-reads-ha.md.
+    nowPlayingDataCommand: `${base}/now_playing/set`,
+    weatherDataCommand: `${base}/weather/set`,
+    agendaDataCommand: `${base}/agenda/set`,
     photoPeopleCommand: `${base}/photo_people/set`,
     photoPeopleState: `${base}/photo_people`,
     photoQueryCommand: `${base}/photo_query/set`,
     photoQueryState: `${base}/photo_query`,
-    agendaCalendarsCommand: `${base}/agenda_calendars/set`,
-    agendaCalendarsState: `${base}/agenda_calendars`,
-    weatherEntityCommand: `${base}/weather_entity/set`,
-    weatherEntityState: `${base}/weather_entity`,
     photoIntervalCommand: `${base}/photo_interval/set`,
     photoIntervalState: `${base}/photo_interval`,
     photoRecencyCommand: `${base}/photo_recency/set`,
@@ -101,14 +103,6 @@ export const buildDeviceTopics = ({
 export const buildGlobalTopics = (
   baseTopic = "inkcast",
 ) => ({
-  /** Retained ON/OFF: is the followed player actually playing right now. */
-  nowPlayingActiveState: `${baseTopic}/now_playing_active`,
-  /** Global default agenda calendars (comma-separated HA calendar entity ids). */
-  agendaCalendarsCommand: `${baseTopic}/agenda_calendars/set`,
-  agendaCalendarsState: `${baseTopic}/agenda_calendars`,
-  /** Global default HA `weather` entity id. */
-  weatherEntityCommand: `${baseTopic}/weather_entity/set`,
-  weatherEntityState: `${baseTopic}/weather_entity`,
   /** Global default Photo Frame rotation interval, minutes. */
   photoIntervalCommand: `${baseTopic}/photo_interval/set`,
   photoIntervalState: `${baseTopic}/photo_interval`,
@@ -409,37 +403,6 @@ export const buildDiscoveryMessages = ({
       },
     },
     {
-      // Which HA calendars feed this device's Clock (Agenda) view
-      // (comma-separated calendar entity ids). Empty = use the global default
-      // on the Inkcast Server device. Retained state doubles as persistence.
-      topic: discoveryTopic("text", "agenda_calendars"),
-      isRetained: true,
-      payload: {
-        ...availability,
-        name: "Agenda: Calendars",
-        unique_id: `inkcast_${device.id}_agenda_calendars`,
-        command_topic: topics.agendaCalendarsCommand,
-        state_topic: topics.agendaCalendarsState,
-        entity_category: "config",
-        device: deviceBlock,
-      },
-    },
-    {
-      // HA `weather` entity feeding this device's Clock (Weather) view. Empty =
-      // use the global default on the Inkcast Server device.
-      topic: discoveryTopic("text", "weather_entity"),
-      isRetained: true,
-      payload: {
-        ...availability,
-        name: "Weather: Entity",
-        unique_id: `inkcast_${device.id}_weather_entity`,
-        command_topic: topics.weatherEntityCommand,
-        state_topic: topics.weatherEntityState,
-        entity_category: "config",
-        device: deviceBlock,
-      },
-    },
-    {
       // Per-device Photo Frame rotation interval. 0 = inherit the global
       // default on the Inkcast Server device (a number entity always carries a
       // value, so 0 is the "unset/inherit" sentinel — 0 minutes is meaningless
@@ -584,57 +547,6 @@ export const buildGlobalDiscoveryMessages = (
   }
 
   return [
-    {
-      // The one signal HA automations need to drive the View selects:
-      // whether the followed player is ACTUALLY playing. Which players are
-      // followed vs. ignored is decided by the HA automation, not here. View
-      // switching itself is deliberately left to HA automations — no
-      // server-side idle fallback.
-      topic: `${discoveryPrefix}/binary_sensor/${nodeId}/server_now_playing_active/config`,
-      isRetained: true as const,
-      payload: {
-        ...availability,
-        name: "Music playing",
-        unique_id: "inkcast_server_now_playing_active",
-        state_topic: topics.nowPlayingActiveState,
-        payload_on: "ON",
-        payload_off: "OFF",
-        device: serverDeviceBlock,
-      },
-    },
-    {
-      // Global default agenda calendars — the household calendars every
-      // display's Clock (Agenda) view uses unless a display overrides them with
-      // its own "Agenda: Calendars" text entity. Comma-separated calendar
-      // entity ids; retained state = persistence.
-      topic: `${discoveryPrefix}/text/${nodeId}/server_agenda_calendars/config`,
-      isRetained: true as const,
-      payload: {
-        ...availability,
-        name: "Agenda: Calendars",
-        unique_id: "inkcast_server_agenda_calendars",
-        command_topic: topics.agendaCalendarsCommand,
-        state_topic: topics.agendaCalendarsState,
-        entity_category: "config",
-        device: serverDeviceBlock,
-      },
-    },
-    {
-      // Global default weather entity — the HA `weather` entity every display's
-      // Clock (Weather) view uses unless it overrides with its own "Weather:
-      // Entity" text entity.
-      topic: `${discoveryPrefix}/text/${nodeId}/server_weather_entity/config`,
-      isRetained: true as const,
-      payload: {
-        ...availability,
-        name: "Weather: Entity",
-        unique_id: "inkcast_server_weather_entity",
-        command_topic: topics.weatherEntityCommand,
-        state_topic: topics.weatherEntityState,
-        entity_category: "config",
-        device: serverDeviceBlock,
-      },
-    },
     {
       // Global default Photo Frame rotation interval (minutes) — used by any
       // display whose own "Photo Frame: Rotation minutes" is 0 (inherit).

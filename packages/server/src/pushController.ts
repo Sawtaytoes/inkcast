@@ -1,6 +1,5 @@
 import { MONO_PALETTE } from "@inkcast/core/panels/palette"
 import type { FullColourEncoding } from "@inkcast/core/pipeline/dither"
-import { FOLLOWED_NOW_PLAYING_KEY } from "./adapters/nowPlayingAdapter.ts"
 import type { ConfiguredDevice } from "./config/env.ts"
 import { buildDeviceTopics } from "./homeAssistant/discovery.ts"
 import type { MqttPublisher } from "./mqtt/publisher.ts"
@@ -42,7 +41,6 @@ export const createPushController = ({
   renderService,
   publisher,
   baseTopic,
-  resolveWeatherEntityId,
   resolvePhotoEncoding,
 }: {
   devices: readonly ConfiguredDevice[]
@@ -52,8 +50,6 @@ export const createPushController = ({
   renderService: RenderService
   publisher: MqttPublisher
   baseTopic: string
-  /** The device's resolved weather entity id (per-device override or global). */
-  resolveWeatherEntityId: (deviceId: string) => string
   /**
    * The device's resolved full-colour wire format (per-device override or
    * global default, both HA config). Only the bleed photo view uses it; every
@@ -67,9 +63,6 @@ export const createPushController = ({
   const deviceById = new Map(
     devices.map((device) => [device.id, device]),
   )
-
-  const getNowPlayingKey = (device: ConfiguredDevice) =>
-    device.nowPlayingEntityId ?? FOLLOWED_NOW_PLAYING_KEY
 
   const renderDevice = async (deviceId: string) => {
     const device = deviceById.get(deviceId)
@@ -152,14 +145,11 @@ export const createPushController = ({
     return renderService.renderDevice({
       device: effectiveDevice,
       viewName: activeView,
-      // Unpinned devices follow the household's active player.
-      nowPlaying: viewDataStore.getNowPlaying(
-        getNowPlayingKey(device),
-      ),
+      // HA pushes each display its own now-playing / weather / agenda payload,
+      // all keyed by device id.
+      nowPlaying: viewDataStore.getNowPlaying(deviceId),
       photoFrame: viewDataStore.getPhotoFrame(deviceId),
-      weather: viewDataStore.getWeather(
-        resolveWeatherEntityId(deviceId),
-      ),
+      weather: viewDataStore.getWeather(deviceId),
       agenda: viewDataStore.getAgenda(deviceId),
       ...(hasAdjustments
         ? {

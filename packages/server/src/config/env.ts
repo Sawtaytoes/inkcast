@@ -42,27 +42,13 @@ const EnvSchema = z.object({
   ),
   MQTT_NODE_ID: z._default(z.string(), "inkcast"),
   MQTT_BASE_TOPIC: z._default(z.string(), "inkcast"),
-  HOME_ASSISTANT_URL: z._default(z.string(), ""),
-  HOME_ASSISTANT_TOKEN: z._default(z.string(), ""),
-  HOME_ASSISTANT_NOW_PLAYING_ENTITY: z._default(
-    z.string(),
-    "",
-  ),
-  HOME_ASSISTANT_FOLLOW_PLATFORMS: z._default(
-    z.string(),
-    "music_assistant,plex",
-  ),
-  // NOTE: the weather entity, the agenda calendars, the photo rotation
-  // interval, and the photo recency half-life are all HA config exposed via
-  // MQTT (global default on the Inkcast Server device + a per-screen
-  // override), NOT env vars — see docs/decisions/
-  // 2026-07-03-user-tunable-view-settings-are-ha-config-entities.md. Only the
-  // agenda poll interval (a server-internal cadence, not a display setting)
-  // stays in env.
-  INKCAST_CALENDAR_MINUTES: z._default(
-    z.coerce.number(),
-    15,
-  ),
+  // Inkcast never connects to Home Assistant. HA PUSHES each display's
+  // now-playing / weather / agenda data over MQTT
+  // (`inkcast/<device>/{now_playing,weather,agenda}/set`) and Inkcast renders
+  // it — so there is no HA URL/token/entity env. See docs/decisions/
+  // 2026-07-04-inkcast-renders-ha-pushed-data-not-reads-ha.md. All user-tunable
+  // display settings are HA/MQTT config entities, never env vars — see
+  // 2026-07-03-user-tunable-view-settings-are-ha-config-entities.md.
   IMMICH_URL: z._default(z.string(), ""),
   IMMICH_API_TOKEN: z._default(z.string(), ""),
   // NOTE: the Photo Frame wire format + lossy quality are HA/MQTT config
@@ -99,18 +85,14 @@ const DeviceConfigSchema = z.object({
     }),
     { algorithm: "floyd-steinberg", supersampleFactor: 2 },
   ),
-  nowPlayingEntityId: z.optional(z.string()),
 })
 
 /**
- * A device as the server runs it: the core render metadata plus the server's
- * per-device data-source wiring (which HA `media_player` feeds its now-playing
- * view). Which HA calendars feed the agenda view is runtime HA config (the
- * "Agenda: Calendars" text entities), not device wiring.
+ * A device as the server runs it: just the core render metadata. There is no
+ * per-device data-source wiring — Home Assistant pushes each display's view
+ * data over MQTT, keyed by device id.
  */
-export type ConfiguredDevice = DeviceMetadata & {
-  nowPlayingEntityId?: string
-}
+export type ConfiguredDevice = DeviceMetadata
 
 const expandDevice = (
   deviceConfig: z.infer<typeof DeviceConfigSchema>,
@@ -148,15 +130,6 @@ export type MqttConfig = {
   baseTopic: string
 }
 
-export type HomeAssistantConfig = {
-  url: string
-  token: string
-  /** Integrations whose players the follow mode tracks. */
-  followedPlatforms: readonly string[]
-  /** How often the agenda adapter re-pulls each device's calendars, minutes. */
-  calendarPollMinutes: number
-}
-
 export type ImmichSettings = {
   url: string
   apiKey: string
@@ -168,7 +141,6 @@ export type InkcastConfig = {
   renderEngine: "chromium" | "satori"
   devices: readonly ConfiguredDevice[]
   mqtt: MqttConfig
-  homeAssistant: HomeAssistantConfig
   immich: ImmichSettings
 }
 
@@ -177,16 +149,7 @@ export const loadConfig = (
   environment: NodeJS.ProcessEnv = process.env,
 ): InkcastConfig => {
   const parsed = EnvSchema.parse(environment)
-  const devices = loadDevices(
-    parsed.INKCAST_DEVICES_FILE,
-  ).map((device) => ({
-    ...device,
-    // No pinned entity anywhere = follow-the-active-player mode.
-    nowPlayingEntityId:
-      device.nowPlayingEntityId ||
-      parsed.HOME_ASSISTANT_NOW_PLAYING_ENTITY ||
-      undefined,
-  }))
+  const devices = loadDevices(parsed.INKCAST_DEVICES_FILE)
 
   return {
     port: parsed.PORT,
@@ -203,15 +166,6 @@ export const loadConfig = (
       discoveryPrefix: parsed.MQTT_DISCOVERY_PREFIX,
       nodeId: parsed.MQTT_NODE_ID,
       baseTopic: parsed.MQTT_BASE_TOPIC,
-    },
-    homeAssistant: {
-      url: parsed.HOME_ASSISTANT_URL,
-      token: parsed.HOME_ASSISTANT_TOKEN,
-      followedPlatforms:
-        parsed.HOME_ASSISTANT_FOLLOW_PLATFORMS.split(",")
-          .map((platform) => platform.trim())
-          .filter((platform) => platform.length > 0),
-      calendarPollMinutes: parsed.INKCAST_CALENDAR_MINUTES,
     },
     immich: {
       url: parsed.IMMICH_URL,

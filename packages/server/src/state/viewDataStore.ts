@@ -1,15 +1,16 @@
 /**
- * The data a now-playing view renders. Produced by the HA media_player adapter
- * (see docs/decisions/2026-07-01-now-playing-reads-ha-media-player.md) and read
- * at render time; `undefined` in the store means "no data yet" and the view
- * falls back to its idle placeholder.
+ * The data a now-playing view renders. Pushed per device by Home Assistant over
+ * MQTT (`inkcast/<device>/now_playing/set`) and parsed by
+ * `mqtt/viewDataPayloads.ts`; read at render time. `undefined` in the store
+ * means "no data yet" and the view falls back to its idle placeholder. See
+ * docs/decisions/2026-07-04-inkcast-renders-ha-pushed-data-not-reads-ha.md.
  */
 export type NowPlayingData = {
   artist: string
   title: string
   album?: string
   isPlaying: boolean
-  /** HA `entity_picture` path (album art / Plex poster), if the player has one. */
+  /** Artwork URL (album art / Plex poster) HA pushed, if any — Inkcast fetches it. */
   artworkPath?: string
   /** The artwork fetched + inlined for the render engines. */
   artworkDataUri?: string
@@ -22,7 +23,7 @@ export type PhotoFrameData = {
   fetchedAtMs: number
 }
 
-/** Current-weather data for the weather-bearing clock view. */
+/** Current-weather data for the weather-bearing clock view, pushed by HA. */
 export type WeatherData = {
   /** e.g. "79°" */
   temperatureText: string
@@ -30,7 +31,7 @@ export type WeatherData = {
   conditionText: string
 }
 
-/** One calendar event on the agenda view, as pulled from Home Assistant. */
+/** One calendar event on the agenda view, as pushed by Home Assistant. */
 export type AgendaEvent = {
   /**
    * Event start, epoch ms. Stored numeric (not pre-formatted) so the registry
@@ -53,19 +54,18 @@ export type AgendaData = {
 }
 
 /**
- * In-memory latest-value store for view data — now-playing keyed by the
- * upstream entity id, photo-frame keyed by device id, weather keyed by its HA
- * weather entity id (displays can point at different weather entities).
- * Adapters write into it as events arrive; the render path reads from it, so
- * a view switch or manual refresh always renders the freshest known data
- * without waiting for the next upstream event.
+ * In-memory latest-value store for view data — all keyed by device id, since
+ * Home Assistant pushes each display its own now-playing / weather / agenda /
+ * photo payload. The MQTT data-in handlers write into it as payloads arrive;
+ * the render path reads from it, so a view switch or manual refresh always
+ * renders the freshest known data without waiting for the next push.
  */
 export type ViewDataStore = {
   getNowPlaying: (
-    entityId: string,
+    deviceId: string,
   ) => NowPlayingData | undefined
   setNowPlaying: (params: {
-    entityId: string
+    deviceId: string
     data: NowPlayingData
   }) => void
   getPhotoFrame: (
@@ -75,11 +75,9 @@ export type ViewDataStore = {
     deviceId: string
     data: PhotoFrameData | undefined
   }) => void
-  getWeather: (
-    weatherEntityId: string,
-  ) => WeatherData | undefined
+  getWeather: (deviceId: string) => WeatherData | undefined
   setWeather: (params: {
-    weatherEntityId: string
+    deviceId: string
     data: WeatherData
   }) => void
   getAgenda: (deviceId: string) => AgendaData | undefined
@@ -90,7 +88,7 @@ export type ViewDataStore = {
 }
 
 export const createViewDataStore = (): ViewDataStore => {
-  const nowPlayingByEntityId = new Map<
+  const nowPlayingByDeviceId = new Map<
     string,
     NowPlayingData
   >()
@@ -98,14 +96,14 @@ export const createViewDataStore = (): ViewDataStore => {
     string,
     PhotoFrameData
   >()
-  const weatherByEntityId = new Map<string, WeatherData>()
+  const weatherByDeviceId = new Map<string, WeatherData>()
   const agendaByDeviceId = new Map<string, AgendaData>()
 
   return {
-    getNowPlaying: (entityId) =>
-      nowPlayingByEntityId.get(entityId),
-    setNowPlaying: ({ entityId, data }) => {
-      nowPlayingByEntityId.set(entityId, data)
+    getNowPlaying: (deviceId) =>
+      nowPlayingByDeviceId.get(deviceId),
+    setNowPlaying: ({ deviceId, data }) => {
+      nowPlayingByDeviceId.set(deviceId, data)
     },
     getPhotoFrame: (deviceId) =>
       photoFrameByDeviceId.get(deviceId),
@@ -116,10 +114,10 @@ export const createViewDataStore = (): ViewDataStore => {
         photoFrameByDeviceId.set(deviceId, data)
       }
     },
-    getWeather: (weatherEntityId) =>
-      weatherByEntityId.get(weatherEntityId),
-    setWeather: ({ weatherEntityId, data }) => {
-      weatherByEntityId.set(weatherEntityId, data)
+    getWeather: (deviceId) =>
+      weatherByDeviceId.get(deviceId),
+    setWeather: ({ deviceId, data }) => {
+      weatherByDeviceId.set(deviceId, data)
     },
     getAgenda: (deviceId) => agendaByDeviceId.get(deviceId),
     setAgenda: ({ deviceId, data }) => {

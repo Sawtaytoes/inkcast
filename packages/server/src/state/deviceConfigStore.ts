@@ -56,30 +56,6 @@ export type DeviceConfigStore = {
     peopleText: string
   }) => void
   /**
-   * Per-device agenda calendars (comma-separated HA calendar entity ids) for the
-   * `Clock (Agenda)` view. Empty = fall back to the global default below.
-   */
-  getAgendaCalendars: (deviceId: string) => string
-  setAgendaCalendars: (params: {
-    deviceId: string
-    calendarsText: string
-  }) => void
-  /** Global default agenda calendars (Inkcast Server device), used when a device's own is empty. */
-  getGlobalAgendaCalendars: () => string
-  setGlobalAgendaCalendars: (calendarsText: string) => void
-  /**
-   * Per-device HA `weather` entity id feeding the `Clock (Weather)` view.
-   * Empty = fall back to the global default below.
-   */
-  getWeatherEntity: (deviceId: string) => string
-  setWeatherEntity: (params: {
-    deviceId: string
-    entityId: string
-  }) => void
-  /** Global default weather entity (Inkcast Server device); used when a device's own is empty. */
-  getGlobalWeatherEntity: () => string
-  setGlobalWeatherEntity: (entityId: string) => void
-  /**
    * Per-device Photo Frame rotation interval, minutes. `undefined` (or 0, the
    * "inherit" sentinel HA sends) = fall back to the global default below.
    */
@@ -196,22 +172,6 @@ export const createDeviceConfigStore =
   (): DeviceConfigStore => {
     const photoPeopleByDeviceId = new Map<string, string>()
     const photoQueryByDeviceId = new Map<string, string>()
-    const agendaCalendarsByDeviceId = new Map<
-      string,
-      string
-    >()
-    const globalAgendaCalendarsHolder = new Map<
-      "global",
-      string
-    >()
-    const weatherEntityByDeviceId = new Map<
-      string,
-      string
-    >()
-    const globalWeatherEntityHolder = new Map<
-      "global",
-      string
-    >()
     const photoIntervalByDeviceId = new Map<
       string,
       number
@@ -285,32 +245,6 @@ export const createDeviceConfigStore =
         globalPhotoQualityHolder.get("global"),
       setGlobalPhotoQuality: (quality) => {
         globalPhotoQualityHolder.set("global", quality)
-      },
-      getAgendaCalendars: (deviceId) =>
-        agendaCalendarsByDeviceId.get(deviceId) ?? "",
-      setAgendaCalendars: ({ deviceId, calendarsText }) => {
-        agendaCalendarsByDeviceId.set(
-          deviceId,
-          calendarsText,
-        )
-      },
-      getGlobalAgendaCalendars: () =>
-        globalAgendaCalendarsHolder.get("global") ?? "",
-      setGlobalAgendaCalendars: (calendarsText) => {
-        globalAgendaCalendarsHolder.set(
-          "global",
-          calendarsText,
-        )
-      },
-      getWeatherEntity: (deviceId) =>
-        weatherEntityByDeviceId.get(deviceId) ?? "",
-      setWeatherEntity: ({ deviceId, entityId }) => {
-        weatherEntityByDeviceId.set(deviceId, entityId)
-      },
-      getGlobalWeatherEntity: () =>
-        globalWeatherEntityHolder.get("global") ?? "",
-      setGlobalWeatherEntity: (entityId) => {
-        globalWeatherEntityHolder.set("global", entityId)
       },
       getPhotoIntervalMinutes: (deviceId) =>
         photoIntervalByDeviceId.get(deviceId),

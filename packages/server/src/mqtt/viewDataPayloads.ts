@@ -190,7 +190,10 @@ export const parseAgendaPayload = (
       }
     })
     .filter((event): event is AgendaEvent => event !== null)
-    .sort((a, b) => a.startMs - b.startMs)
+    .sort(
+      (firstEvent, secondEvent) =>
+        firstEvent.startMs - secondEvent.startMs,
+    )
 
   return { events }
 }

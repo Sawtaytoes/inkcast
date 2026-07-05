@@ -5,11 +5,6 @@ import {
   type DitherAlgorithm,
 } from "@inkcast/core/devices/device"
 import type { FullColourEncoding } from "@inkcast/core/pipeline/dither"
-import { createCalendarAgendaAdapter } from "./adapters/calendarAgendaAdapter.ts"
-import {
-  createNowPlayingAdapter,
-  FOLLOWED_NOW_PLAYING_KEY,
-} from "./adapters/nowPlayingAdapter.ts"
 import { createPhotoFrameAdapter } from "./adapters/photoFrameAdapter.ts"
 import { createApp } from "./app.ts"
 import {
@@ -24,7 +19,13 @@ import {
   buildGlobalTopics,
 } from "./homeAssistant/discovery.ts"
 import { createMqttPublisher } from "./mqtt/publisher.ts"
+import {
+  parseAgendaPayload,
+  parseNowPlayingPayload,
+  parseWeatherPayload,
+} from "./mqtt/viewDataPayloads.ts"
 import { createPushController } from "./pushController.ts"
+import { fetchArtworkDataUri } from "./render/artworkFetch.ts"
 import { createRenderService } from "./render/renderService.ts"
 import { startClockTicker } from "./schedulers/clockTicker.ts"
 import {
@@ -213,14 +214,10 @@ const main = async () => {
   const viewDataStore = createViewDataStore()
   const deviceConfigStore = createDeviceConfigStore()
 
-  // The weather entity, photo rotation interval, and photo recency half-life
-  // are all HA config (global default on the Inkcast Server device + a
-  // per-screen override), resolved live from the config store — no env vars.
-  // See docs/decisions/
+  // The photo rotation interval and photo recency half-life are HA config
+  // (global default on the Inkcast Server device + a per-screen override),
+  // resolved live from the config store — no env vars. See docs/decisions/
   // 2026-07-03-user-tunable-view-settings-are-ha-config-entities.md.
-  const resolveWeatherEntityId = (deviceId: string) =>
-    deviceConfigStore.getWeatherEntity(deviceId) ||
-    deviceConfigStore.getGlobalWeatherEntity()
   const resolvePhotoIntervalMinutes = (
     deviceId: string,
   ) => {
@@ -277,19 +274,6 @@ const main = async () => {
 
     return { format, quality }
   }
-  // The union of every device's resolved weather entity — the set the HA
-  // stream watches (deduped, empties dropped). Read live so config edits take
-  // effect without a reconnect.
-  const getWeatherEntityIds = () =>
-    Array.from(
-      new Set(
-        config.devices
-          .map((device) =>
-            resolveWeatherEntityId(device.id),
-          )
-          .filter((entityId) => entityId.length > 0),
-      ),
-    )
 
   const pushController = createPushController({
     devices: config.devices,
@@ -299,7 +283,6 @@ const main = async () => {
     renderService,
     publisher,
     baseTopic,
-    resolveWeatherEntityId,
     resolvePhotoEncoding,
   })
 
@@ -315,102 +298,108 @@ const main = async () => {
   /** Push every device whose SELECTED view matches, without awaiting. */
   const pushDevicesShowingView = ({
     getIsViewIncluded,
-    entityKey,
   }: {
     getIsViewIncluded: (viewName: ViewName) => boolean
-    /** Pinned entity id, or the followed-player key for unpinned devices. */
-    entityKey?: string
   }) => {
     config.devices
-      .filter(
-        (device) =>
-          getIsViewIncluded(
-            deviceStore.getActiveView(device.id),
-          ) &&
-          (entityKey === undefined ||
-            (device.nowPlayingEntityId ??
-              FOLLOWED_NOW_PLAYING_KEY) === entityKey),
+      .filter((device) =>
+        getIsViewIncluded(
+          deviceStore.getActiveView(device.id),
+        ),
       )
       .forEach((device) => {
         pushDeviceLogged(device.id)
       })
   }
 
-  // Phase-2 now-playing adapter: stream media_player entities from Home
-  // Assistant and re-push affected devices on change. Devices with a pinned
-  // nowPlayingEntityId watch that entity; devices without one follow the
-  // most recently active player from the followed platforms (which players
-  // are followed vs. ignored is an HA-automation concern). The same
-  // connection streams the weather entity for the clock views. Disabled
-  // unless HOME_ASSISTANT_URL + HOME_ASSISTANT_TOKEN are set.
-  const pinnedEntityIds = Array.from(
-    new Set(
-      config.devices
-        .map((device) => device.nowPlayingEntityId)
-        .filter(
-          (
-            candidateEntityId,
-          ): candidateEntityId is string =>
-            Boolean(candidateEntityId),
-        ),
-    ),
-  )
-  const hasUnpinnedDevice = config.devices.some(
-    (device) => !device.nowPlayingEntityId,
-  )
-  const hasNowPlayingAdapter = Boolean(
-    config.homeAssistant.url && config.homeAssistant.token,
-  )
-  const nowPlayingAdapter = hasNowPlayingAdapter
-    ? createNowPlayingAdapter({
-        homeAssistantUrl: config.homeAssistant.url,
-        homeAssistantToken: config.homeAssistant.token,
-        pinnedEntityIds,
-        followedPlatforms: hasUnpinnedDevice
-          ? config.homeAssistant.followedPlatforms
-          : [],
-        getWeatherEntityIds,
-        viewDataStore,
-        onNowPlayingChanged: (entityKey) => {
-          // The retained "Music playing" state is the signal HA automations
-          // key off to drive the View selects (no server-side idle logic).
-          if (entityKey === FOLLOWED_NOW_PLAYING_KEY) {
-            publisher
-              .publish({
-                topic:
-                  buildGlobalTopics(baseTopic)
-                    .nowPlayingActiveState,
-                payload: viewDataStore.getNowPlaying(
-                  FOLLOWED_NOW_PLAYING_KEY,
-                )?.isPlaying
-                  ? "ON"
-                  : "OFF",
-                isRetained: true,
-              })
-              .catch(() => {})
-          }
-          pushDevicesShowingView({
-            getIsViewIncluded: getIsNowPlayingView,
-            entityKey,
-          })
-        },
-        onWeatherChanged: (weatherEntityId) => {
-          // Re-push only the weather-showing devices that resolve to the
-          // entity whose data just changed.
-          config.devices
-            .filter(
-              (device) =>
-                deviceStore.getActiveView(device.id) ===
-                  "Clock (Weather)" &&
-                resolveWeatherEntityId(device.id) ===
-                  weatherEntityId,
-            )
-            .forEach((device) => {
-              pushDeviceLogged(device.id)
-            })
-        },
-      })
-    : null
+  // MQTT data-in: Home Assistant PUSHES each display its now-playing / weather /
+  // agenda payload (`inkcast/<device>/{now_playing,weather,agenda}/set`);
+  // Inkcast parses it into the view-data store and re-pushes that display if the
+  // affected view is showing. Inkcast never reads HA — all source/priority/
+  // exclusion logic lives in the HA templates that produce these payloads. See
+  // docs/decisions/2026-07-04-inkcast-renders-ha-pushed-data-not-reads-ha.md.
+  //
+  // Payloads are JSON; the per-view parsers are defensive, so a non-JSON or
+  // empty payload degrades to the view's idle placeholder rather than throwing.
+  const parseJsonPayload = (payload: string): unknown => {
+    try {
+      return JSON.parse(payload)
+    } catch {
+      return undefined
+    }
+  }
+  const applyNowPlayingPayload = async ({
+    deviceId,
+    payload,
+  }: {
+    deviceId: string
+    payload: string
+  }) => {
+    const nowPlaying = parseNowPlayingPayload(
+      parseJsonPayload(payload),
+    )
+    // The artwork URL HA pushed is fetched + inlined for the render engines;
+    // the URL itself is the cache key (HA rotates it when the art changes).
+    const artworkDataUri = nowPlaying.artworkPath
+      ? await fetchArtworkDataUri({
+          url: nowPlaying.artworkPath,
+        })
+      : undefined
+    viewDataStore.setNowPlaying({
+      deviceId,
+      data: artworkDataUri
+        ? { ...nowPlaying, artworkDataUri }
+        : nowPlaying,
+    })
+    if (
+      getIsNowPlayingView(
+        deviceStore.getActiveView(deviceId),
+      )
+    ) {
+      pushDeviceLogged(deviceId)
+    }
+  }
+
+  const applyWeatherPayload = ({
+    deviceId,
+    payload,
+  }: {
+    deviceId: string
+    payload: string
+  }) => {
+    const weather = parseWeatherPayload(
+      parseJsonPayload(payload),
+    )
+    if (!weather) {
+      return
+    }
+    viewDataStore.setWeather({ deviceId, data: weather })
+    if (
+      deviceStore.getActiveView(deviceId) ===
+      "Clock (Weather)"
+    ) {
+      pushDeviceLogged(deviceId)
+    }
+  }
+
+  const applyAgendaPayload = ({
+    deviceId,
+    payload,
+  }: {
+    deviceId: string
+    payload: string
+  }) => {
+    viewDataStore.setAgenda({
+      deviceId,
+      data: parseAgendaPayload(parseJsonPayload(payload)),
+    })
+    if (
+      deviceStore.getActiveView(deviceId) ===
+      "Clock (Agenda)"
+    ) {
+      pushDeviceLogged(deviceId)
+    }
+  }
 
   // Keep clock-bearing panels on real time: re-push them each minute. This
   // also keeps the agenda view honest — the minute tick re-renders it, dropping
@@ -422,75 +411,6 @@ const main = async () => {
       })
     },
   })
-
-  // Which calendars a device's agenda uses is HA config, resolved live from the
-  // "Agenda: Calendars" text entities: the device's own value, or the global
-  // default (Inkcast Server device) when the device's is empty. Comma-separated
-  // calendar entity ids. No env var — see docs/decisions/
-  // 2026-07-02-agenda-calendars-are-ha-config-entities-not-env.md.
-  const parseCalendarEntityIds = (calendarsText: string) =>
-    calendarsText
-      .split(",")
-      .map((entityId) => entityId.trim())
-      .filter((entityId) => entityId.length > 0)
-  const resolveCalendarEntityIds = (deviceId: string) => {
-    const perDevice = parseCalendarEntityIds(
-      deviceConfigStore.getAgendaCalendars(deviceId),
-    )
-    return perDevice.length > 0
-      ? perDevice
-      : parseCalendarEntityIds(
-          deviceConfigStore.getGlobalAgendaCalendars(),
-        )
-  }
-
-  // Calendar agenda adapter: pulls each device's configured calendars from HA
-  // (like the weather flow) and re-pushes it when its day changes, so an
-  // imminent appointment surfaces on the "Clock (Agenda)" view. HA automations
-  // decide WHEN a display switches to that view; this just supplies the data.
-  // Enabled whenever HA is configured; a device with no calendars set just
-  // renders an empty (weather-clock) agenda until one is set from HA.
-  const calendarAgendaAdapter = hasNowPlayingAdapter
-    ? createCalendarAgendaAdapter({
-        homeAssistantUrl: config.homeAssistant.url,
-        homeAssistantToken: config.homeAssistant.token,
-        deviceIds: config.devices.map(
-          (device) => device.id,
-        ),
-        getCalendarEntityIds: resolveCalendarEntityIds,
-        pollMinutes:
-          config.homeAssistant.calendarPollMinutes,
-        viewDataStore,
-        onAgendaChanged: (deviceId) => {
-          if (
-            deviceStore.getActiveView(deviceId) ===
-            "Clock (Agenda)"
-          ) {
-            pushDeviceLogged(deviceId)
-          }
-        },
-      })
-    : null
-
-  /** Refresh every device's agenda (global calendars changed). */
-  const refreshAllAgendas = () => {
-    config.devices.forEach((device) => {
-      void calendarAgendaAdapter?.refreshDevice(device.id)
-    })
-  }
-
-  /** Re-push every device currently showing the weather clock (global weather changed). */
-  const refreshAllWeatherDevices = () => {
-    config.devices
-      .filter(
-        (device) =>
-          deviceStore.getActiveView(device.id) ===
-          "Clock (Weather)",
-      )
-      .forEach((device) => {
-        pushDeviceLogged(device.id)
-      })
-  }
 
   /** Re-push every device showing the Photo Frame (global format/quality changed). */
   const refreshAllPhotoFrameDevices = () => {
@@ -605,52 +525,6 @@ const main = async () => {
                 deviceConfigStore.getPhotoQuery(deviceId),
               ),
             onApplied: restartPhotoFrame,
-          },
-        ],
-        [
-          "agendaCalendars",
-          {
-            applyPayload: ({ deviceId, payload }) => {
-              deviceConfigStore.setAgendaCalendars({
-                deviceId,
-                calendarsText: payload,
-              })
-              return payload
-            },
-            getHasValue: (deviceId) =>
-              Boolean(
-                deviceConfigStore.getAgendaCalendars(
-                  deviceId,
-                ),
-              ),
-            onApplied: async (deviceId) => {
-              await calendarAgendaAdapter?.refreshDevice(
-                deviceId,
-              )
-            },
-          },
-        ],
-        [
-          "weatherEntity",
-          {
-            applyPayload: ({ deviceId, payload }) => {
-              deviceConfigStore.setWeatherEntity({
-                deviceId,
-                entityId: payload,
-              })
-              return payload
-            },
-            getHasValue: (deviceId) =>
-              Boolean(
-                deviceConfigStore.getWeatherEntity(
-                  deviceId,
-                ),
-              ),
-            onApplied: async (deviceId) => {
-              // Pull the newly-pointed entity's current value, then repaint.
-              nowPlayingAdapter?.refreshWeather()
-              await pushController.pushDevice(deviceId)
-            },
           },
         ],
         [
@@ -923,14 +797,6 @@ const main = async () => {
         string,
         { command: string; state: string }
       > = {
-        agendaCalendars: {
-          command: topics.agendaCalendarsCommand,
-          state: topics.agendaCalendarsState,
-        },
-        weatherEntity: {
-          command: topics.weatherEntityCommand,
-          state: topics.weatherEntityState,
-        },
         photoInterval: {
           command: topics.photoIntervalCommand,
           state: topics.photoIntervalState,
@@ -1004,6 +870,9 @@ const main = async () => {
         | "viewRestore"
         | "photoNext"
         | "photoPrevious"
+        | "nowPlayingData"
+        | "weatherData"
+        | "agendaData"
         | "knob"
         | "globalKnob"
       /** Set when kind is "knob" or "globalKnob". */
@@ -1033,45 +902,6 @@ const main = async () => {
       string,
       GlobalConfigKnob
     > = new Map([
-      [
-        "agendaCalendars",
-        {
-          command: globalTopics.agendaCalendarsCommand,
-          state: globalTopics.agendaCalendarsState,
-          applyPayload: (payload) => {
-            deviceConfigStore.setGlobalAgendaCalendars(
-              payload,
-            )
-            return payload
-          },
-          getHasValue: () =>
-            Boolean(
-              deviceConfigStore.getGlobalAgendaCalendars(),
-            ),
-          afterChange: refreshAllAgendas,
-        },
-      ],
-      [
-        "weatherEntity",
-        {
-          command: globalTopics.weatherEntityCommand,
-          state: globalTopics.weatherEntityState,
-          applyPayload: (payload) => {
-            deviceConfigStore.setGlobalWeatherEntity(
-              payload,
-            )
-            return payload
-          },
-          getHasValue: () =>
-            Boolean(
-              deviceConfigStore.getGlobalWeatherEntity(),
-            ),
-          afterChange: () => {
-            nowPlayingAdapter?.refreshWeather()
-            refreshAllWeatherDevices()
-          },
-        },
-      ],
       [
         "photoInterval",
         {
@@ -1203,6 +1033,19 @@ const main = async () => {
         deviceId: device.id,
         kind: "photoPrevious",
       })
+      // HA pushes this display's view data (retained) to these topics.
+      commandRoutes.set(topics.nowPlayingDataCommand, {
+        deviceId: device.id,
+        kind: "nowPlayingData",
+      })
+      commandRoutes.set(topics.weatherDataCommand, {
+        deviceId: device.id,
+        kind: "weatherData",
+      })
+      commandRoutes.set(topics.agendaDataCommand, {
+        deviceId: device.id,
+        kind: "agendaData",
+      })
       Array.from(configKnobs.keys()).forEach((knobKind) => {
         const knobTopics = getKnobTopics({
           device,
@@ -1303,17 +1146,9 @@ const main = async () => {
               await photoFrameAdapter.showPhotoFrame(
                 route.deviceId,
               )
-            } else if (payload === "Clock (Agenda)") {
-              // Switching in renders the currently-known day immediately, then
-              // a fresh pull re-pushes if the day has changed since last poll.
-              await pushController.setView({
-                deviceId: route.deviceId,
-                viewName: payload,
-              })
-              await calendarAgendaAdapter?.refreshDevice(
-                route.deviceId,
-              )
             } else {
+              // Every other view (including Clock (Agenda), whose data arrives
+              // on the retained `agenda/set` topic) just renders what's known.
               await pushController.setView({
                 deviceId: route.deviceId,
                 viewName: payload,
@@ -1348,15 +1183,6 @@ const main = async () => {
               await photoFrameAdapter.showPhotoFrame(
                 route.deviceId,
               )
-            } else if (payload === "Clock (Agenda)") {
-              // Boot-time restore into the agenda: push what we have, then
-              // pull the day so it's current without waiting for the poll.
-              await pushController.pushDevice(
-                route.deviceId,
-              )
-              await calendarAgendaAdapter?.refreshDevice(
-                route.deviceId,
-              )
             } else {
               await pushController.pushDevice(
                 route.deviceId,
@@ -1375,6 +1201,27 @@ const main = async () => {
           await photoFrameAdapter?.showPreviousPhoto(
             route.deviceId,
           )
+          return
+        }
+        if (route.kind === "nowPlayingData") {
+          await applyNowPlayingPayload({
+            deviceId: route.deviceId,
+            payload,
+          })
+          return
+        }
+        if (route.kind === "weatherData") {
+          applyWeatherPayload({
+            deviceId: route.deviceId,
+            payload,
+          })
+          return
+        }
+        if (route.kind === "agendaData") {
+          applyAgendaPayload({
+            deviceId: route.deviceId,
+            payload,
+          })
           return
         }
 
@@ -1561,11 +1408,6 @@ const main = async () => {
             })
             .catch(() => {})
         })
-
-      // Now that retained weather config has restored, pull the current value
-      // of every configured weather entity (the initial HA snapshot may have
-      // predated the restore).
-      nowPlayingAdapter?.refreshWeather()
     }, 5_000)
   }
 
@@ -1579,15 +1421,13 @@ const main = async () => {
     port: config.port,
   })
   console.log(
-    `[inkcast] serving on :${config.port} (engine=${config.renderEngine}, mqtt=${publisher.isEnabled ? "on" : "off"}, ha=${hasNowPlayingAdapter ? "on" : "off"}, agenda=${calendarAgendaAdapter ? "on" : "off"}, devices=${config.devices.length})`,
+    `[inkcast] serving on :${config.port} (engine=${config.renderEngine}, mqtt=${publisher.isEnabled ? "on" : "off"}, devices=${config.devices.length})`,
   )
 
   const shutdown = async () => {
     console.log("[inkcast] shutting down")
     server.close()
     clockTicker.close()
-    nowPlayingAdapter?.close()
-    calendarAgendaAdapter?.close()
     photoFrameAdapter?.close()
     await publisher.close()
     await renderService.close()

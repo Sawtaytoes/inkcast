@@ -70,8 +70,6 @@ describe("buildDiscoveryMessages", () => {
       "number", // Display: Crop left
       "text", // Photo Frame: People
       "text", // Photo Frame: Query
-      "text", // Agenda: Calendars
-      "text", // Weather: Entity
       "number", // Photo Frame: Rotation minutes
       "number", // Photo Frame: Recency half-life days
       "select", // Photo Frame: Format
@@ -82,22 +80,18 @@ describe("buildDiscoveryMessages", () => {
     ])
   })
 
-  test("the global device exposes the music sensor + inherited defaults", () => {
+  test("the global device exposes only the inherited photo-frame defaults", () => {
+    // HA pushes now-playing/weather/agenda data, so the server no longer
+    // advertises a Music-playing sensor or Weather/Agenda entity-picker config.
     const globalMessages = buildGlobalDiscoveryMessages()
     expect(
       globalMessages.map((message) => message.topic),
     ).toEqual([
-      "homeassistant/binary_sensor/inkcast/server_now_playing_active/config",
-      "homeassistant/text/inkcast/server_agenda_calendars/config",
-      "homeassistant/text/inkcast/server_weather_entity/config",
       "homeassistant/number/inkcast/server_photo_interval/config",
       "homeassistant/number/inkcast/server_photo_recency/config",
       "homeassistant/select/inkcast/server_photo_format/config",
       "homeassistant/number/inkcast/server_photo_quality/config",
     ])
-    expect(globalMessages[0].payload.state_topic).toBe(
-      "inkcast/now_playing_active",
-    )
     expect(
       (
         globalMessages[0].payload.device as {

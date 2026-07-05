@@ -7,7 +7,7 @@ import { NowPlayingEditorial } from "@inkcast/views/NowPlayingEditorial"
 import { NowPlayingPoster } from "@inkcast/views/NowPlayingPoster"
 import { PhotoFrameView } from "@inkcast/views/PhotoFrameView"
 import { createElement, type ReactElement } from "react"
-import { IDLE_NOW_PLAYING } from "../adapters/nowPlayingAdapter.ts"
+import { IDLE_NOW_PLAYING } from "../mqtt/viewDataPayloads.ts"
 import type {
   AgendaData,
   NowPlayingData,
@@ -19,9 +19,9 @@ import type {
  * The views a device can show, and how to turn a view name + device + view
  * data into a React element to render. View names are human-readable — they
  * appear verbatim in Home Assistant's View select — and double as the API/
- * MQTT payload values. Now-playing data comes from the HA media_player
- * adapter (undefined = no data yet → idle placeholder); clock-bearing views
- * use the server clock in the process timezone (`TZ`).
+ * MQTT payload values. Now-playing / weather / agenda data is pushed by Home
+ * Assistant over MQTT (undefined = no data yet → idle placeholder);
+ * clock-bearing views use the server clock in the process timezone (`TZ`).
  */
 
 export const VIEW_NAMES = [
