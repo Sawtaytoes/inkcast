@@ -61,14 +61,17 @@ Refresh All` (manual `automation.trigger` won't set `trigger.id`).
 ephemeral per-client Plex entities; it exists and is used now, but if Plex
 recreates it under a new id the Kitchen `players` field must be updated to match.
 
-**Cleanup still owed (deploy env):** the TrueNAS `inkcast` app still carries
-pivot-removed env (`HOME_ASSISTANT_URL`, `HOME_ASSISTANT_TOKEN`,
-`HOME_ASSISTANT_WEATHER_ENTITY`, `INKCAST_PHOTO_MINUTES`). The pivot image ignores
-them, but they should be dropped (`midclt call --job app.update inkcast …`,
-merging the `envs` array) to match the "infrastructure-only env" locked decision.
+**Cleanup — DONE 2026-07-05.** Deploy env trimmed to the 6 infra vars
+(`MQTT_URL/USERNAME/PASSWORD`, `PORT`, `IMMICH_URL`, `IMMICH_API_TOKEN`) via
+`midclt call --job app.update inkcast '{"values":{"envs":[…]}}'` on storeman —
+dropped `HOME_ASSISTANT_URL`/`_TOKEN`/`_WEATHER_ENTITY` + `INKCAST_PHOTO_MINUTES`
+(all unread by the pivot code; only a stale comment in `index.ts` mentions them).
 The stale `binary_sensor.inkcast_server_music_playing` / `text.…weather_entity` /
-`text.…follow_excluded_players` HA entities are **retained MQTT discovery configs**
-from the old image; they'll clear when their discovery topics are blanked.
+`text.…agenda_calendars` / `text.…follow_excluded_players` HA entities were
+already gone (the app restarts reconciled discovery), and the 4 orphaned retained
+**state** topics (`inkcast/{agenda_calendars,weather_entity,now_playing_active}`,
+`inkcast/config/follow_exclude`) were cleared with empty retained payloads. Broker
++ HA verified clean.
 
 ## ⚠️ 2026-07-05 — ARCHITECTURE PIVOT: CODE CUTOVER DONE (read this first)
 
