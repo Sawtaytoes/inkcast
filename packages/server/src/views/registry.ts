@@ -3,7 +3,6 @@ import { ClockAgendaView } from "@inkcast/views/ClockAgendaView"
 import { ClockView } from "@inkcast/views/ClockView"
 import { ClockWeatherView } from "@inkcast/views/ClockWeatherView"
 import { NowPlayingDashboard } from "@inkcast/views/NowPlayingDashboard"
-import { NowPlayingEditorial } from "@inkcast/views/NowPlayingEditorial"
 import { NowPlayingPoster } from "@inkcast/views/NowPlayingPoster"
 import { PhotoFrameView } from "@inkcast/views/PhotoFrameView"
 import { createElement, type ReactElement } from "react"
@@ -26,7 +25,6 @@ import type {
 
 export const VIEW_NAMES = [
   "Now Playing (Dashboard)",
-  "Now Playing (Editorial)",
   "Now Playing (Poster)",
   "Photo Frame",
   "Clock",
@@ -38,7 +36,6 @@ export type ViewName = (typeof VIEW_NAMES)[number]
 const NOW_PLAYING_VIEW_NAMES: ReadonlySet<ViewName> =
   new Set([
     "Now Playing (Dashboard)",
-    "Now Playing (Editorial)",
     "Now Playing (Poster)",
   ])
 
@@ -264,12 +261,6 @@ export const renderViewElement = ({
     return createElement(PhotoFrameView, {
       ...panel,
       photoDataUri: photoFrame?.photoDataUri,
-    })
-  }
-  if (viewName === "Now Playing (Editorial)") {
-    return createElement(NowPlayingEditorial, {
-      ...panel,
-      ...nowPlayingProps,
     })
   }
   if (viewName === "Now Playing (Poster)") {

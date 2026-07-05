@@ -1,4 +1,4 @@
-import { NowPlayingEditorial } from "@inkcast/views/NowPlayingEditorial"
+import { NowPlayingPoster } from "@inkcast/views/NowPlayingPoster"
 import type { CSSProperties } from "react"
 
 /**
@@ -57,7 +57,7 @@ export const PanelFrame = ({
 
       <div style={scaledStyle}>
         <div style={transformStyle}>
-          <NowPlayingEditorial
+          <NowPlayingPoster
             width={width}
             height={height}
             colourMode={colourMode}
