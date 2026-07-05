@@ -1,71 +1,74 @@
-# Plan: add two 13.3" Impressions + re-slug all four screens to opaque ids
+# Plan: re-slug the two existing screens to opaque ids (+ how to add the two 13.3" later)
 
-**Status:** planned, blocked on hardware (real MACs; the two 13.3" panels not yet on hand).
 **Decision basis:** [decisions/2026-07-05-device-id-is-opaque-immutable-identity.md](decisions/2026-07-05-device-id-is-opaque-immutable-identity.md).
+**Architecture:** [architecture.md](architecture.md).
 
-## Architecture as-built (so the plan is grounded)
+Two separate pieces of work:
 
-Everything is MQTT pub/sub through the MQTT broker. Three actors, none of which open a
-direct connection to another:
+- **Now:** re-slug the two screens we have (`inky-phat`, `inky-impression`) to opaque ids.
+- **Later (documented, not yet built):** add the two Pimoroni Inky Impression 13.3" panels
+  when they arrive.
 
-- **Inkcast server (container)** — *renders pixels* and owns the **device registry**. It
-  reads its device list once at boot (`INKCAST_DEVICES_FILE`, else the built-in
-  `SEED_DEVICES`) and, per device, **publishes the retained Home Assistant MQTT-discovery
-  configs** to `homeassistant/<component>/inkcast/<id>_<entity>/config`. That publish is
-  what makes the devices/entities appear in HA. It also owns the config store (dither,
-  rotation, crop, photo settings, …), persisted as retained MQTT state.
-- **Home Assistant** — the brain: pushes each screen's view data
-  (`inkcast/<id>/{now_playing,weather,agenda}/set`), drives the View select / Refresh, and
-  edits config knobs. HA does **not** originate the registry — it receives whatever Inkcast
-  advertises via discovery.
-- **Device (Pi Zero receiver)** — a dumb sink: `inkcast_receiver.py` subscribes to
-  `inkcast/<id>/image` (retained PNG), decodes, draws. It self-registers nothing and holds
-  no settings.
+## As-built starting point
 
-> Today there is **no devices file and no mount** on the running app — it is on
-> `SEED_DEVICES` (`inky-phat`, `inky-impression`). Introducing a devices file is a
-> prerequisite of this plan, not just an edit.
+The running app has **no devices file and no mount** — it runs on the built-in
+`SEED_DEVICES` (`inky-phat`, `inky-impression`). Introducing a devices file is therefore a
+prerequisite: without it the ids are compiled into the image and can't be changed.
 
-## Target slugs (opaque, immutable)
+## Target slugs (opaque, immutable — never encode location/model)
 
-| Screen | New `id` | geometry | mode |
-| --- | --- | --- | --- |
-| Inky pHAT (existing) | `inky-a615f8` | 250×122 | mono |
-| Inky Impression 7.3" (existing) | `inky-6e6697` | 800×480 | e6 |
-| Inky Impression 13.3" (new) | `inky-07769e` | 1600×1200 | e6 |
-| Inky Impression 13.3" (new) | `inky-4da1be` | 1600×1200 | e6 |
+| Screen | Old id (seed) | New id | geometry | mode |
+| --- | --- | --- | --- | --- |
+| Inky pHAT | `inky-phat` | `inky-a615f8` | 250×122 | mono |
+| Inky Impression 7.3" | `inky-impression` | `inky-6e6697` | 800×480 | e6 |
 
-Target `inkcast.config.json` is already drafted (gitignored) with these four entries;
-MACs are `REPLACE_WITH_REAL_MAC_*` placeholders.
+`inkcast.config.json` (gitignored) is drafted with these two entries; MACs are
+`REPLACE_WITH_REAL_MAC_*` placeholders (fill from each Pi's `ip link` during step 4 — the
+`mac` field only feeds HA's device `connections` block, it does not affect topics).
 
-## Steps (execute once panels + MACs are in hand)
+## Migration steps (order matters — avoids a blank screen)
 
-1. **Fill real MACs** into the four entries in `inkcast.config.json` (the `mac` field only
-   feeds HA's device `connections` block — informational; it does not affect topics).
-2. **Introduce the devices file on the TrueNAS app:** add a host-path storage mount for
-   `inkcast.config.json` into the container and set `INKCAST_DEVICES_FILE=<mounted path>`.
-   Restart the app so it reloads the list.
-3. **Purge the old seed identities' retained data** (else HA shows ghosts and the broker
-   serves stale images). For the retiring ids `inky-phat` and `inky-impression`, publish an
-   empty retained payload to every `homeassistant/<component>/inkcast/<old-id>_*/config`
-   discovery topic and to every `inkcast/<old-id>/#` runtime topic that is retained.
-4. **Flash / reconfigure each Pi** with its new image topic
-   (`INKCAST_IMAGE_TOPIC=inkcast/<new-id>/image`) in the systemd drop-in; restart the
-   receiver.
-5. **Re-apply HA presentation** to the freshly-created entities: friendly name
-   (e.g. "Kitchen Counter eInk Screen") + area. These do NOT carry over from the old
-   entities — that loss is the known cost of re-slugging (per the decision record).
-6. **Update the HA automations' `inkcast_device`** to the new slugs
-   (`automation.control_*_eink_screen` → `data.inkcast_device`). For the two new screens,
-   clone the existing per-screen automation (Now Playing priority + Weather + Agenda +
-   15-min refresh + HA start) once their location/players/calendars are known.
-7. **Verify** each screen paints (Refresh button) and its entities are live; confirm no
-   ghost devices remain from the old ids.
+1. **Introduce the devices file on the TrueNAS app** (the one step not automatable via the
+   TrueNAS MCP — do it in Apps → inkcast → Edit):
+   - Add a **host-path storage** mount: host `…/inkcast.config.json` → container
+     `/config/inkcast.config.json` (read-only).
+   - Add env **`INKCAST_DEVICES_FILE=/config/inkcast.config.json`**.
+   - Save → the app redeploys and now serves the two opaque-slug devices.
+2. **Purge the retiring seeds' retained data** (else HA shows ghost devices and the broker
+   serves stale images): publish an empty retained payload to every
+   `homeassistant/<component>/inkcast/inky-phat_*/config` and
+   `…/inky-impression_*/config` discovery topic, and to the retained runtime topics under
+   `inkcast/inky-phat/#` and `inkcast/inky-impression/#`. (Same technique used to clear the
+   pre-HA-agnostic ghost entities on 2026-07-05.)
+3. **Verify** the two new opaque-slug devices appear in HA and paint on Refresh.
+4. **Reconfigure each Pi** (from this box, `ssh pi@<ip>`; IPs via UniFi): edit the systemd
+   drop-in `INKCAST_IMAGE_TOPIC=inkcast/<new-id>/image`, `systemctl restart
+   inkcast-receiver`; grab the real MAC (`ip link`) and backfill it into the config file.
+   Between steps 1 and 4 the e-ink just holds its last frame (no blank).
+5. **Re-apply HA presentation** to the new entities: friendly name ("Kitchen Counter eInk
+   Screen" / "Office Kevin's Desk eInk Screen") + area (kitchen / office). These do NOT
+   carry over from the old entities — the known cost of re-slugging.
+6. **Update the HA automations' `inkcast_device`**:
+   `automation.control_kitchen_counter_eink_screen` → `inky-6e6697`;
+   `automation.control_office_kevin_s_desk_eink_screen` → `inky-a615f8`.
 
-## Blocked on
+## Later: adding the two 13.3" panels
 
-- The two Pimoroni Inky Impression 13.3" panels (Spectra-6 E673, 1600×1200) — confirmed
-  provenance (Pimoroni, clears the no-Chinese-origin constraint).
-- Real MACs for all four Pis.
-- Each new screen's location → HA friendly name/area + which `media_player`s and
-  calendars feed its content automation.
+Pimoroni Inky Impression 13.3" (Spectra-6 E673, 1600×1200, `colourMode: "e6"`) — provenance
+confirmed Pimoroni (clears the no-Chinese-origin constraint). When on hand, append two
+entries to `inkcast.config.json` and restart:
+
+```json
+{ "id": "inky-07769e", "label": "Inky Impression 13.3\" #07769e", "mac": "…",
+  "width": 1600, "height": 1200, "colourMode": "e6", "rotation": 0,
+  "ditherProfile": { "algorithm": "floyd-steinberg", "supersampleFactor": 2 } }
+{ "id": "inky-4da1be", "label": "Inky Impression 13.3\" #4da1be", "mac": "…",
+  "width": 1600, "height": 1200, "colourMode": "e6", "rotation": 0,
+  "ditherProfile": { "algorithm": "floyd-steinberg", "supersampleFactor": 2 } }
+```
+
+Then per new screen: flash the Pi with `INKCAST_IMAGE_TOPIC=inkcast/<id>/image`, assign HA
+friendly name/area, and clone a per-screen automation (Now Playing priority + Weather +
+Agenda + 15-min refresh + HA start) with that screen's players/calendars. Slugs
+`inky-07769e` / `inky-4da1be` are pre-reserved so nothing is retyped later. Do **not** add
+these entries before the panels exist — Inkcast would publish discovery for phantom screens.
