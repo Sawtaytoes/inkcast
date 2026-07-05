@@ -6,6 +6,68 @@ cutover" night). Read this + [../AGENTS.md](../AGENTS.md) +
 [decisions/README.md](decisions/README.md) first. History of the earlier
 phases is in git (`git log docs/HANDOFF.md`).
 
+## ✅ 2026-07-05 (later) — HA-SIDE DATA-PUSH BUILT + VERIFIED (pivot TODO #3 done)
+
+The HA templates/automations that push each view's data over MQTT (the remaining
+half of the pivot) are **built and live in HA**, and the loop is **verified on
+both real panels** (rendered PNGs pulled from `http://storeman.octen:8788/api/devices/<id>/image`).
+The app was restarted onto `:latest` first so it was guaranteed to be the pivot
+image (the deployed env still carried stale `HOME_ASSISTANT_*` vars — see cleanup
+note below).
+
+**Live device ids (confirmed):** `inky-phat` (Office Kevin's Desk, mono) and
+`inky-impression` (Kitchen Counter, e6). The HA entity slug `inky_impression_7_3`
+comes from the device *name* ("Inky Impression 7.3\""), **not** the MQTT topic id
+— the topic base is `inkcast/inky-impression/…`. No `INKCAST_DEVICES_FILE` in the
+deploy, so ids come from `SEED_DEVICES`.
+
+**Four automations (unique_ids; entity_ids differ — HA slugs them from the alias).
+Real house-specific entity ids are intentionally kept OUT of this public repo
+(locked decision); the concrete ids live in HA + the next agent's memory.**
+
+| unique_id | Publishes | Source (see HA for the real entity ids) |
+| --- | --- | --- |
+| `inkcast_push_now_playing_kitchen` | `inkcast/inky-impression/now_playing/set` | **priority list: the Kitchen's Plex family-room player → the Shield cast player** (Plex title+poster beats the cast player's YouTube title/no-art — per [decisions/2026-07-04-now-playing-source-is-ha-config-priority-list.md](decisions/2026-07-04-now-playing-source-is-ha-config-priority-list.md)). First `playing` wins. |
+| `inkcast_push_now_playing_office` | `inkcast/inky-phat/now_playing/set` | priority list of the office followed players (desk → office group → downstairs group) |
+| `inkcast_push_weather_all_displays` | both `…/weather/set` | the house weather entity (`{temperature, condition}`), on state-change + `/15` time_pattern + HA start |
+| `inkcast_push_agenda_all_displays` | both `…/agenda/set` | `calendar.get_events` over the household calendars, flattened to `{start, summary, isAllDay}`, on `/15` + HA start |
+
+All four also fire on `homeassistant` start; now-playing fires on the followed
+players' state changes. Artwork: Music-Assistant/Plex `entity_picture` is a
+**relative** proxy path, so the templates prefix the container-reachable HA base
+URL (only when the value isn't already absolute).
+
+**Verified 2026-07-05 (rendered on glass, PNGs pulled from the image API):** the
+pHAT Clock (Weather) view shows the temperature + friendly condition; a Now
+Playing view shows the `Nothing playing` idle placeholder (empty title+artist
+round-trips correctly); Clock (Agenda) rendered test events with correct sort,
+12-hour times, and all-day handling.
+
+**⚠️ Calendar caveat (live gap):** at build time BOTH household calendars were
+`state: unavailable` (transient Google-Calendar-integration state — it also
+breaks the existing view-switch automations' calendar triggers), so `get_events`
+matched no entities and real agenda couldn't be fetched. The agenda **render**
+path is proven with a manual payload; the **live fetch** populates on the next
+`/15` tick once the calendars recover. The agenda automation was hardened
+(`continue_on_error` on `get_events` + an `{{ cal is defined }}` guard) so a
+transient outage **skips** publishing rather than erroring or clobbering the
+last-good retained agenda with empty. If agenda stays blank, check the
+`calendar.*` states first.
+
+**Plex-priority follow-up (Kitchen):** the Plex family-room player is one of ~50
+ephemeral per-client Plex entities; it exists and is used now, but if Plex
+recreates it under a new id the Kitchen now-playing source list must be updated
+to match.
+
+**Cleanup still owed (deploy env):** the TrueNAS `inkcast` app still carries
+pivot-removed env (`HOME_ASSISTANT_URL`, `HOME_ASSISTANT_TOKEN`,
+`HOME_ASSISTANT_WEATHER_ENTITY`, `INKCAST_PHOTO_MINUTES`). The pivot image ignores
+them, but they should be dropped (`midclt call --job app.update inkcast …`,
+merging the `envs` array) to match the "infrastructure-only env" locked decision.
+The stale `binary_sensor.inkcast_server_music_playing` / `text.…weather_entity` /
+`text.…follow_excluded_players` HA entities are **retained MQTT discovery configs**
+from the old image; they'll clear when their discovery topics are blanked.
+
 ## ⚠️ 2026-07-05 — ARCHITECTURE PIVOT: CODE CUTOVER DONE (read this first)
 
 Inkcast is now a **dumb, Home-Assistant-agnostic renderer**. The locked decision
@@ -214,19 +276,25 @@ the HA device page. **Until the HA-side templates publish the data topics
 
 ## ⭐ Next steps (start here — prioritized)
 
-1. **Build the HA-side data-push templates (pivot TODO #3) — the panels render
-   idle until they exist**, then verify against real life: now-playing/weather/
-   agenda arriving on the data topics, the view-switching automations (retrigger
-   off the HA-side player, not the removed "Music playing" sensor), Photo Frame
+1. ~~Build the HA-side data-push templates (pivot TODO #3).~~ **DONE + verified
+   2026-07-05** (see the top ✅ section). **Remaining real-life verification:**
+   now-playing with *actual* playback (Plex/YouTube on the Shield, MA in the
+   office — idle placeholder + weather + agenda-render are already confirmed);
+   confirm real agenda populates once the calendars leave `unavailable`; the
+   view-switching automations (retrigger off the HA-side player, not the removed
+   "Music playing" sensor), Photo Frame
    Next/Previous buttons, the Query entity
    ("green shirt"-style Immich smart search), Color/B&W +
    Brightness/Saturation knobs on the Impression, and how the
    neutral-protected dither looks on real photos (it kills colour speckle
    on text; confirm it doesn't flatten photo grays).
-2. **Hostnames, not IPs, for the Pis** (maintainer ask): `inky-phat` (LAN
-   `10.1.0.32`) / `inky-spectra` (IoT VLAN `192.168.101.200`, reachable via
-   `ssh -J root@storeman.octen`); reference via `.octen`/mDNS names in docs +
-   deploy scripts; verify which form resolves.
+2. ~~**Hostnames, not IPs, for the Pis** (maintainer ask).~~ **DONE 2026-07-05**
+   — both resolve by `.octen` name (bare name works too): **`inky-phat.octen`
+   → `192.168.101.177`** (IoT VLAN — the old `10.1.0.32` LAN address is stale)
+   and **`inky-spectra.octen` → `192.168.101.200`** (IoT VLAN, `ssh -J
+   root@storeman.octen`). Docs now use the names; the `device-client/` scripts
+   already used `pi@<host>` placeholders (no hardcoded IPs). `storeman.octen`
+   → `10.1.0.6`, `homeassistant.octen` → `10.1.0.4`.
 3. **[docs/future-work.md](future-work.md)** — maintainer-deferred ideas:
    photo year/date overlay on the Photo Frame, richer weather (icons,
    condition backgrounds, forecast view), UniFi-Protect-presence-driven
@@ -359,8 +427,9 @@ playing" binary sensor was removed** — what's playing is HA's own knowledge no
 - Secrets: repo `.env` (gitignored). TrueNAS app carries its own env copies.
 - Devices: `SEED_DEVICES` in `@inkcast/core` (no devices file in use) —
   includes per-device `idleViewName`.
-- Receivers: pHAT `pi@10.1.0.32`, Impression `pi@192.168.101.200` (IoT VLAN,
-  `-J root@storeman.octen`); both run `inkcast-receiver.service` with a
+- Receivers: pHAT `pi@inky-phat.octen` (IoT VLAN `192.168.101.177`), Impression
+  `pi@inky-spectra.octen` (IoT VLAN `192.168.101.200`, `-J root@storeman.octen`);
+  both resolve by `.octen` name. Both run `inkcast-receiver.service` with a
   root-owned mode-600 creds drop-in. Old units (`inky-phat-fetcher`,
   `immich-impression-frame`) disabled but kept — rollback is one command
   (see `device-client/README.md`).
