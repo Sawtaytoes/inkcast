@@ -7,7 +7,11 @@ Naming scheme (locked 2026-07-05): **hostname = MQTT id = `eink-<hex>`** — one
 identity per device for both the Pi's OS hostname and its Inkcast topic base. Human labels
 live elsewhere: a **UniFi client alias** (owner-managed) and the HA friendly name/area.
 
-- **Now:** re-slug the two screens we have and rename their Pi hostnames to `eink-<hex>`.
+- **✅ DONE 2026-07-05:** re-slugged the two existing screens and renamed their Pi hostnames
+  to `eink-<hex>`; verified end-to-end (devices file mounted, both Pis drawing on new topics,
+  automations re-pointed, HA relabeled, 92 old `inky-*` retained topics purged).
+  - Kitchen Impression → `eink-6e6697` (Pi `192.168.101.200`, wlan0 `b8:27:eb:cf:b8:a4`).
+  - Office pHAT → `eink-a615f8` (Pi `192.168.101.177`, wlan0 `b8:27:eb:00:3e:27`).
 - **Later (documented):** add the two Pimoroni Inky Impression 13.3" panels when they arrive.
 
 ## As-built starting point
