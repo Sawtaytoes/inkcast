@@ -6,6 +6,75 @@ cutover" night). Read this + [../AGENTS.md](../AGENTS.md) +
 [decisions/README.md](decisions/README.md) first. History of the earlier
 phases is in git (`git log docs/HANDOFF.md`).
 
+## ⚠️ 2026-07-04 — ARCHITECTURE PIVOT IN PROGRESS (read this first)
+
+Inkcast is mid-migration to a **dumb, Home-Assistant-agnostic renderer**. The
+locked decision is
+[decisions/2026-07-04-inkcast-renders-ha-pushed-data-not-reads-ha.md](decisions/2026-07-04-inkcast-renders-ha-pushed-data-not-reads-ha.md)
+(supersedes "now-playing reads HA media_player" and "agenda pulls from HA").
+
+**Target architecture:** Inkcast's only contract with the house is **MQTT**. HA
+*computes and pushes* each view's data per device
+(`inkcast/<device>/now_playing/set`, `.../weather/set`, `.../agenda/set`);
+Inkcast subscribes and renders what it's handed. Inkcast **stops connecting to
+HA entirely** — delete the HA WebSocket client, `media_player` reading, the
+"followed platforms" registry lookup, the now-playing follow/priority resolver,
+the weather/calendar fetchers, and the "Music playing" binary sensor. **All**
+"which player / idle-vs-active / priority / exclusions / when to switch a view"
+logic moves to **HA templates + automations**. Time is the one exception:
+rendered locally from Inkcast's own clock; only timezone/format are MQTT config.
+
+**Landed on `master` (this session, deployed):**
+
+- The other agent's branch `feat/inkcast-mqtt-data-in`, merged: emoji-strip in
+  titles (no tofu), art-forward Editorial redesign, the decision record above,
+  and **scaffolding** — `packages/server/src/mqtt/viewDataPayloads.ts` (payload
+  parsers, 84 tests green) + `packages/server/src/render/artworkFetch.ts`
+  (plain-URL artwork fetch, since HA will push an artwork **URL**, not bytes).
+  Scaffolding is **dormant** (not wired) — the WebSocket still runs.
+- Small fixes shipped tonight (all deployed, verified): compact pHAT agenda now
+  stacks up to 3 events with the time shrunk/moved up; duplicate agenda events
+  (same event shared across two calendars) are de-duped; all-day agenda events
+  stay visible their whole day (were wrongly filtered at midnight); and a real
+  HA-WebSocket bug — `get_states` reused a fixed command id so HA rejected every
+  on-demand refresh (`id_reuse`), meaning a just-configured weather entity
+  didn't appear until a restart. Fixed with unique incrementing ids
+  (`homeAssistantStates.ts`). **NOTE:** that fix lives in code the pivot will
+  delete — keep it until the WebSocket is ripped out, then it goes with it.
+
+**Still TODO (the atomic slice + HA side):**
+
+1. **Rip out the HA WebSocket + wire MQTT data-in.** Replace the now-playing /
+   weather / agenda *fetchers* with MQTT subscriptions using the parsers in
+   `viewDataPayloads.ts`; keep the view renderers. Delete the follow resolver,
+   `homeAssistantStates.ts`, `haArtwork.ts` (use `artworkFetch.ts`), the
+   "Music playing" sensor, and the HA URL/token env.
+2. **Clock timezone/format become MQTT config entities** (like dither/crop).
+3. **HA-side templates/automations** publish each view's payload to Inkcast's
+   MQTT topics — this is where the now-playing priority (Plex before the
+   Shield's cast player), follow-the-active-player, and exclusions now live.
+
+**A live HA config gap found tonight (fix on the HA side, not in the app):** the
+"Weather: Entity" MQTT config (`text.inkcast_server_weather_entity`) was unset
+(`unknown`), so no weather rendered on either clock. I set it to
+`weather.pirateweather` — weather now shows. Under the new architecture HA will
+push weather data instead, but until then that config must stay set.
+
+**Do NOT** add follow/priority/exclusion logic to Inkcast (I mistakenly built a
+"follow players allowlist" config entity this session and reverted it — it
+violated both the follow-exclusion decision and the pivot above). The now-playing
+"wrong player" symptom the maintainer reported (a panel showing a speaker's last
+track instead of the Shield) is a *consequence* of the old shared follow-
+aggregate and is **resolved by the pivot**: once HA pushes each panel's
+now-playing payload, HA fully decides what each panel shows.
+
+**HA view-switching automations (already correct, HA-side):**
+`automation.inky_impression_now_playing_view` (Kitchen Counter →
+`select.inky_impression_7_3_view`, triggers off `media_player.family_room_shield_6`)
+and `automation.inky_phat_now_playing_view` (Office Desk → `select.inky_phat_view`,
+triggers off the office/downstairs players). They pick *when* to show Now Playing;
+under the pivot they'll also publish *what* to show.
+
 ## One-line status
 
 Inkcast is **fully live on both panels**: GitHub Actions builds to GHCR,
