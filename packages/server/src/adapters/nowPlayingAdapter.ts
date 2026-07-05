@@ -52,12 +52,24 @@ const readStringAttribute = ({
 }
 
 /**
- * YouTube Music (and friends) decorate titles with ♫/♪ glyphs; they render
- * poorly at panel sizes and waste width, so strip them from every field.
+ * YouTube titles (and YouTube Music) decorate text with ♫/♪ notes and emoji
+ * (🐦 📚 …). The panel font (Atkinson Hyperlegible) has no emoji glyphs, so
+ * they render as ▯ tofu boxes and waste width — strip both from every field.
+ * Covers the emoji/pictographic, dingbat/symbol, regional-indicator, and
+ * variation-selector/ZWJ ranges, then collapses the whitespace they leave.
  */
 const stripDecorativeNotes = (value: string) =>
   value
-    .replace(/[♪♫♬♩]/g, " ")
+    // Zero-width joiner + variation selectors glue emoji sequences together;
+    // drop them (not to a space), each on its own so the character class can't
+    // match a joined sequence.
+    .replace(/\u{200D}/gu, "")
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, "")
+    // Emoji/pictographs, dingbats & symbols, arrows, misc symbols, and bullets.
+    .replace(
+      /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{2022}]/gu,
+      " ",
+    )
     .replace(/\s{2,}/g, " ")
     .trim()
 
