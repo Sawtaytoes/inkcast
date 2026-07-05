@@ -58,8 +58,10 @@ traversable by 568, and every other app already uses `App-Configs/<app>/`). The 
 6. **Update the automations' `inkcast_device`:**
    `automation.control_kitchen_counter_eink_screen` → `eink-6e6697`;
    `automation.control_office_kevin_s_desk_eink_screen` → `eink-a615f8`.
-7. **UniFi client alias** for each Pi: **owner-managed** (Kevin sets these to match his
-   naming). Not part of this automated migration.
+7. **UniFi client alias** for each Pi: set to `Raspberry Pi Zero W - <HA device name>` — i.e.
+   `Raspberry Pi Zero W - Kitchen Counter eInk Screen` /
+   `Raspberry Pi Zero W - Office Kevin's Desk eInk Screen` (renamed on the onboard-wifi
+   `b8:27:eb:*` MAC). Future panels follow the same `Raspberry Pi … - <HA name>` pattern.
 8. **Verify:** both screens paint (Refresh), automations fire, no ghost devices remain.
 
 ## Later: adding the two 13.3" panels
