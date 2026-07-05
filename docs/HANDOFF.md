@@ -21,43 +21,45 @@ comes from the device *name* ("Inky Impression 7.3\""), **not** the MQTT topic i
 — the topic base is `inkcast/inky-impression/…`. No `INKCAST_DEVICES_FILE` in the
 deploy, so ids come from `SEED_DEVICES`.
 
-**Four automations (unique_ids; entity_ids differ — HA slugs them from the alias).
-Real house-specific entity ids are intentionally kept OUT of this public repo
-(locked decision); the concrete ids live in HA + the next agent's memory.**
+**Structure (mirrors the maintainer's room-light automations: a shared `Control …`
+script + per-thing `Control …` automations driven by trigger IDs).** Real
+house-specific entity ids are intentionally kept OUT of this public repo (locked
+decision); the concrete ids live in HA + the next agent's memory.
 
-| unique_id | Publishes | Source (see HA for the real entity ids) |
-| --- | --- | --- |
-| `inkcast_push_now_playing_kitchen` | `inkcast/inky-impression/now_playing/set` | **priority list: the Kitchen's Plex family-room player → the Shield cast player** (Plex title+poster beats the cast player's YouTube title/no-art — per [decisions/2026-07-04-now-playing-source-is-ha-config-priority-list.md](decisions/2026-07-04-now-playing-source-is-ha-config-priority-list.md)). First `playing` wins. |
-| `inkcast_push_now_playing_office` | `inkcast/inky-phat/now_playing/set` | priority list of the office followed players (desk → office group → downstairs group) |
-| `inkcast_push_weather_all_displays` | both `…/weather/set` | the house weather entity (`{temperature, condition}`), on state-change + `/15` time_pattern + HA start |
-| `inkcast_push_agenda_all_displays` | both `…/agenda/set` | `calendar.get_events` over the household calendars, flattened to `{start, summary, isAllDay}`, on `/15` + HA start |
+- **Shared script `Control Inkcast eInk Screen`** (`script.control_inkcast_eink_screen`,
+  Media category + `media` label) — all the publish logic. Typed `fields:`
+  `device_id`, `players` (priority list), `weather_entity`, `calendars`,
+  `ha_base_url`, `trigger_id`. It branches on `trigger_id` and publishes to
+  `inkcast/<device_id>/{now_playing,weather,agenda}/set` (retained). Now-playing
+  picks the first `playing` player (empty → idle placeholder); artwork prefixes
+  the HA base URL onto a relative `entity_picture`; agenda runs `calendar.get_events`
+  over the passed `calendars`, guarded by `continue_on_error` + `{{ cal is defined }}`
+  so a calendar outage **skips** (never clobbers the last-good retained agenda).
+- **Two per-display automations** `Control Kitchen Counter eInk Screen` +
+  `Control Office Kevin's Desk eInk Screen` (Media category + `media` label) —
+  triggers only, each calls the script with `trigger_id: "{{ trigger.id }}"` and
+  that display's params. Trigger ids: `Now Playing` (its players' state changes),
+  `Weather` (weather entity change), `Refresh Periodic` (`/15` → weather+agenda),
+  `Refresh All` (HA start → all three).
 
-All four also fire on `homeassistant` start; now-playing fires on the followed
-players' state changes. Artwork: Music-Assistant/Plex `entity_picture` is a
-**relative** proxy path, so the templates prefix the container-reachable HA base
-URL (only when the value isn't already absolute).
+**Kitchen now-playing priority** stays Plex family-room player → Shield cast
+player (Plex title+poster beats the cast player's YouTube title/no-art — per
+[decisions/2026-07-04-now-playing-source-is-ha-config-priority-list.md](decisions/2026-07-04-now-playing-source-is-ha-config-priority-list.md)),
+passed as the `players` field. **Which calendars a display shows is the automation's
+`calendars` field** — set it there per display (there is no Inkcast "Agenda:
+Calendars" config entity anymore; the pivot removed it).
 
-**Verified 2026-07-05 (rendered on glass, PNGs pulled from the image API):** the
-pHAT Clock (Weather) view shows the temperature + friendly condition; a Now
-Playing view shows the `Nothing playing` idle placeholder (empty title+artist
-round-trips correctly); Clock (Agenda) rendered test events with correct sort,
-12-hour times, and all-day handling.
-
-**⚠️ Calendar caveat (live gap):** at build time BOTH household calendars were
-`state: unavailable` (transient Google-Calendar-integration state — it also
-breaks the existing view-switch automations' calendar triggers), so `get_events`
-matched no entities and real agenda couldn't be fetched. The agenda **render**
-path is proven with a manual payload; the **live fetch** populates on the next
-`/15` tick once the calendars recover. The agenda automation was hardened
-(`continue_on_error` on `get_events` + an `{{ cal is defined }}` guard) so a
-transient outage **skips** publishing rather than erroring or clobbering the
-last-good retained agenda with empty. If agenda stays blank, check the
-`calendar.*` states first.
+**Verified 2026-07-05 (rendered on glass, PNGs pulled from the image API):** with
+the calendar integration restored, calling the script with `trigger_id: Refresh All`
+made the pHAT Clock (Weather) show temp + condition, a Now Playing view show the
+`Nothing playing` idle placeholder, and Clock (Agenda) render the **real** all-day
+event for the day (correct sort / 12-hour times / all-day handling). To seed all
+topics on demand, call `script.control_inkcast_eink_screen` with `trigger_id:
+Refresh All` (manual `automation.trigger` won't set `trigger.id`).
 
 **Plex-priority follow-up (Kitchen):** the Plex family-room player is one of ~50
 ephemeral per-client Plex entities; it exists and is used now, but if Plex
-recreates it under a new id the Kitchen now-playing source list must be updated
-to match.
+recreates it under a new id the Kitchen `players` field must be updated to match.
 
 **Cleanup still owed (deploy env):** the TrueNAS `inkcast` app still carries
 pivot-removed env (`HOME_ASSISTANT_URL`, `HOME_ASSISTANT_TOKEN`,
@@ -298,15 +300,16 @@ the HA device page. **Until the HA-side templates publish the data topics
 3. **[docs/future-work.md](future-work.md)** — maintainer-deferred ideas:
    photo year/date overlay on the Photo Frame, richer weather (icons,
    condition backgrounds, forecast view), UniFi-Protect-presence-driven
-   photo people, collapsing the three now-playing designs into one.
+   photo people, collapsing the now-playing designs into one.
 4. **Optional:** web config UI (Jotai/RTK noted), TLS 8883, progress text on
    the Dashboard (NO animated progress bars — e-ink).
 
 ## Settled by the maintainer (do not re-litigate)
 
 - **Track title first, above the artist, biggest+bold**; hide an empty/"—"
-  artist line (`decisions/2026-07-02-title-above-artist.md`). Editorial +
-  Poster stay until he tests them on the big panel.
+  artist line (`decisions/2026-07-02-title-above-artist.md`). **Editorial was
+  removed 2026-07-05** (maintainer's call); Poster stays as a selectable view,
+  but both displays' view-switch automations now select Now Playing (Dashboard).
 - **Face crop shifts, never zooms** — maximal cover window steered to keep
   faces in frame; letterbox when impossible
   (`decisions/2026-07-02-face-crop-shifts-never-zooms.md`).
@@ -387,7 +390,7 @@ pushController → renderService (Chromium; Satori alt) → dither pipeline
 
 ### HA entities per device (MQTT discovery; config names prefixed by area)
 
-Image (Screen) · Select (View: 3 now-playing / Photo Frame / Clock /
+Image (Screen) · Select (View: 2 now-playing [Dashboard, Poster] / Photo Frame / Clock /
 Clock (Weather) / Clock (Agenda)) · Buttons (Refresh, Photo Frame:
 Next/Previous photo) · Config: Display: Dither, Display: Color mode (e6 only,
 Color|Black & White), Display: Brightness %, Display: Saturation %,
@@ -411,7 +414,8 @@ playing" binary sensor was removed** — what's playing is HA's own knowledge no
   artist/album cap below the fitted title so hierarchy never inverts;
   compact ≤200px: no banner, body optically high, bold small text,
   `Th-02` / `12:45a` footer. The maintainer's favorite.
-- `NowPlayingEditorial` / `NowPlayingPoster` — untested on glass, kept.
+- `NowPlayingPoster` — untested on glass, kept as a selectable view
+  (`NowPlayingEditorial` was removed 2026-07-05).
 - `PhotoFrameView` — full-bleed pre-cropped photo.
 - `ClockView` — big clock (date now bold: thin text dies on e-ink).
 - `ClockWeatherView` — clock + `79° Partly cloudy` (weather optional).
