@@ -67,7 +67,139 @@ now-playing payload, HA fully decides what each panel shows.
 `select.inky_impression_7_3_view`, triggers off `media_player.family_room_shield_6`)
 and `automation.inky_phat_now_playing_view` (Office Desk → `select.inky_phat_view`,
 triggers off the office/downstairs players). They pick *when* to show Now Playing;
-under the pivot they'll also publish *what* to show.
+under the pivot they must ALSO publish *what* to show (the data topics below).
+⚠️ These (and any other automation) can no longer reference
+`binary_sensor.inkcast_server_music_playing` — **it was deleted in the pivot**.
+Re-point any such trigger to the HA-side `media_player` state directly (e.g.
+`{{ is_state('media_player.family_room_shield_6','playing') }}`), which is the
+same value HA now computes to build the pushed `now_playing` payload.
+
+## 🏗️ HA-SIDE WORK — the remaining half (BUILD THIS NEXT; app side is done)
+
+**The panels render idle placeholders until HA publishes the data topics below.**
+Inkcast no longer connects to HA — it only renders what HA pushes over MQTT. All
+"which player / priority / exclusions / which weather entity / which calendars"
+logic lives HERE now, in HA templates + automations. A prior agent has HA MCP
+access and may build these; the maintainer confirmed **it is safe to restart the
+`inkcast` TrueNAS app** at any time (MCP `truenas` `stop_app`/`start_app` on app
+`inkcast`, `pull_policy: always`; or the Deploy pipeline section below).
+
+### Topic base + device ids
+
+Base topic `inkcast/<device-id>`. Default seed ids: **`inky-phat`** (mono pHAT)
+and **`inky-impression`** (e6 Impression). The real deploy may set
+`INKCAST_DEVICES_FILE` with different ids — confirm the live ids from the HA
+device page (each display's Image entity) or the retained `inkcast/+/image`
+topics before hard-coding them in automations.
+
+### Payload contracts (retained JSON; parsers in `viewDataPayloads.ts` — defensive)
+
+**`inkcast/<id>/now_playing/set`** — `{ title, artist?, album?, isPlaying, artwork? }`
+- `title` (string), `artist`/`album` (string, optional) — Inkcast strips emoji/♫
+  and hides an empty/"—" artist. If BOTH title and artist are empty → the idle
+  "Nothing playing" placeholder renders.
+- `isPlaying` (boolean) — must be literally `true` for the playing state.
+- `artwork` (string, optional) — a URL Inkcast fetches with a **plain GET, no
+  auth header, no base URL**. ⚠️ It MUST be absolute and fetchable by the Inkcast
+  container. HA's `entity_picture` is a *relative* proxy path with the auth token
+  already in the query string, so publish `<ha_base_url> ~ entity_picture` (the
+  container-reachable HA URL + the relative path). Music Assistant often exposes
+  an absolute art URL directly. A bad/unreachable URL just renders without art.
+
+**`inkcast/<id>/weather/set`** — `{ temperature, condition? }`
+- `temperature` (number, raw) — Inkcast rounds and appends `°`. No numeric
+  temperature → the weather line is omitted (plain clock).
+- `condition` (string, optional) — an HA weather condition CODE (`sunny`,
+  `partlycloudy`, `rainy`, `snowy`, `lightning-rainy`, …); Inkcast maps it to
+  friendly text. `unknown`/`unavailable` → blank; an unmapped code passes through.
+
+**`inkcast/<id>/agenda/set`** — `{ events: [{ start, summary, isAllDay? }] }`
+- `start`: epoch ms (number) OR an ISO-8601 string. `summary`: string (empty →
+  dropped). `isAllDay`: boolean (optional; all-day events stay visible their whole
+  day). Push the WHOLE day's events across all the display's calendars — Inkcast
+  sorts, drops already-started timed events, de-dupes, and slices to the panel
+  budget (3 compact / 4 large).
+
+### Example automations (adapt entity ids; publish per device)
+
+Now-playing — priority order + exclusions live in the `select('is_state',...)`
+list (first playing wins; omit e.g. bedtime speakers to exclude them):
+```yaml
+alias: Inkcast — push Office now_playing
+triggers:
+  - trigger: state
+    entity_id: [media_player.office_speaker, media_player.downstairs]
+actions:
+  - variables:
+      players: [media_player.office_speaker, media_player.downstairs]
+      active: >
+        {{ (players | select('is_state','playing') | list + players)
+           | first }}
+  - action: mqtt.publish
+    data:
+      topic: inkcast/inky-phat/now_playing/set
+      retain: true
+      payload: >
+        {{ {
+          'title':  state_attr(active,'media_title') or '',
+          'artist': state_attr(active,'media_artist') or '',
+          'album':  state_attr(active,'media_album_name') or '',
+          'isPlaying': is_state(active,'playing'),
+          'artwork': (state_attr(active,'entity_picture') and
+                      ('http://homeassistant.local:8123' ~ state_attr(active,'entity_picture')))
+                     or ''
+        } | to_json }}
+```
+Weather (repeat the publish for each device id; trigger on the weather entity +
+a 15-min `time_pattern`):
+```yaml
+  - action: mqtt.publish
+    data:
+      topic: inkcast/inky-phat/weather/set
+      retain: true
+      payload: >
+        {{ {'temperature': state_attr('weather.pirateweather','temperature'),
+            'condition': states('weather.pirateweather')} | to_json }}
+```
+Agenda (trigger on a 15-min `time_pattern` + HA start; flatten today's calendars):
+```yaml
+actions:
+  - action: calendar.get_events
+    target: { entity_id: [calendar.family, calendar.work] }
+    data:
+      start_date_time: "{{ today_at('00:00') }}"
+      end_date_time: "{{ today_at('00:00') + timedelta(days=1) }}"
+    response_variable: cal
+  - variables:
+      events: >
+        {% set ns = namespace(items=[]) %}
+        {% for entity, result in cal.items() %}
+          {% for e in result.events %}
+            {% set ns.items = ns.items + [{
+              'start': e.start, 'summary': e.summary,
+              'isAllDay': (e.start | length) == 10 }] %}
+          {% endfor %}
+        {% endfor %}
+        {{ ns.items }}
+  - action: mqtt.publish
+    data:
+      topic: inkcast/inky-phat/agenda/set
+      retain: true
+      payload: "{{ {'events': events} | to_json }}"
+```
+(`calendar.get_events` returns all-day events with a date-only `start` of length
+10, e.g. `2026-07-05`; timed events carry a full ISO datetime — Inkcast's parser
+accepts both.)
+
+### Verifying the loop end to end
+
+1. Restart `inkcast` (safe) so it re-subscribes; watch `docker logs` (filter
+   `ix-inkcast`) for `push <id>` lines when a payload lands.
+2. Publish a test now_playing payload (HA Developer Tools → Services →
+   `mqtt.publish`, retain on) and confirm the panel repaints (the panel must be
+   on a Now Playing view — the view select is still HA-automation-driven).
+3. `curl` the image API or check the HA Image entity to see the render without
+   waiting for the panel refresh.
 
 ## One-line status
 
@@ -128,9 +260,10 @@ the HA device page. **Until the HA-side templates publish the data topics
 ## Deploy pipeline (how to ship a change)
 
 1. Commit to `master`, push to GitHub (`origin`; push is authorized).
-2. Actions: typecheck + tests (64) → `ghcr.io/sawtaytoes/inkcast:latest`.
-3. Bounce the TrueNAS app `inkcast` (MCP `stop_app`/`start_app`) —
-   `pull_policy: always`. Env changes: `midclt call --job app.update
+2. Actions: typecheck + tests (67) → `ghcr.io/sawtaytoes/inkcast:latest`.
+3. Bounce the TrueNAS app `inkcast` (MCP `truenas` `stop_app`/`start_app`) —
+   **safe to restart anytime** (maintainer-confirmed); `pull_policy: always` so
+   it pulls the latest image. Env changes: `midclt call --job app.update
    inkcast '{"values": ...}'` on storeman (merge `envs` array; see git log
    of this session) or the UI.
 4. Verify: `curl http://storeman.octen:8788/health`, `docker logs` (filter
