@@ -96,3 +96,39 @@ Revert to the old fetcher in one step (keeps the unit files around either way):
 ssh pi@<host> 'sudo systemctl disable --now inkcast-receiver && \
   sudo systemctl enable --now inky-phat-fetcher'
 ```
+
+## Buttons (optional) — `inkcast_buttons.py`
+
+Wires the Inky Impression's 4 side buttons to the server's image-change MQTT
+commands, so a press advances/steps/refreshes the photo without touching HA.
+
+`inkcast_buttons.py` reads the buttons over `gpiod` and publishes `PRESS` to
+`inkcast/<device>/{photo_next,photo_previous,refresh}/set` (the same command
+topics the HA buttons use). It's independent of the receiver — different GPIO
+lines — so both services run together.
+
+**Button GPIO differs by panel** (the 13.3" display driver claims GPIO16/26, so
+its buttons moved):
+
+| Label | Impression 7.3" | Impression 13.3" | Default action |
+| --- | --- | --- | --- |
+| A | GPIO5  | GPIO5  | Next photo |
+| B | GPIO6  | GPIO6  | Previous photo |
+| C | GPIO16 | GPIO25 | Refresh (new photo) |
+| D | GPIO24 | GPIO24 | Next photo |
+
+Edit `BUTTON_ACTIONS` at the top of `inkcast_buttons.py` to remap. Install:
+
+```bash
+scp device-client/inkcast_buttons.py       pi@<host>:/home/pi/inkcast_buttons.py
+scp device-client/inkcast-buttons.service  pi@<host>:/tmp/inkcast-buttons.service
+ssh pi@<host> 'sudo mv /tmp/inkcast-buttons.service /etc/systemd/system/ && \
+  sudo install -d -m 755 /etc/systemd/system/inkcast-buttons.service.d && \
+  sudo cp /etc/systemd/system/inkcast-receiver.service.d/mqtt.conf \
+          /etc/systemd/system/inkcast-buttons.service.d/mqtt.conf && \
+  sudo chmod 600 /etc/systemd/system/inkcast-buttons.service.d/mqtt.conf && \
+  sudo systemctl daemon-reload && sudo systemctl enable --now inkcast-buttons'
+```
+
+The drop-in is the receiver's — broker host/creds + `INKCAST_IMAGE_TOPIC` (the
+device id is derived from it). To confirm a press: `journalctl -u inkcast-buttons -f`.

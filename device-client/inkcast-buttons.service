@@ -1,0 +1,19 @@
+[Unit]
+Description=Inkcast button handler (Inky Impression side buttons -> MQTT image commands)
+Documentation=https://github.com/Sawtaytoes/inkcast
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Environment=PYTHONUNBUFFERED=1
+# Broker host/creds + INKCAST_IMAGE_TOPIC come from a root-owned drop-in
+# (NOT committed): /etc/systemd/system/inkcast-buttons.service.d/mqtt.conf
+# (same values as the receiver's drop-in).
+ExecStart=/home/pi/inky-venv/bin/python3 /home/pi/inkcast_buttons.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

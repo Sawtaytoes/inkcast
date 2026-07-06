@@ -119,3 +119,12 @@ Both Pimoroni Inky Impression 13.3" panels are provisioned, drawing, and discove
    error` flapping). Fixed in `device-client/inkcast_receiver.py` (default now derives from the
    image topic's device id, unique per screen); a per-device `INKCAST_CLIENT_ID` in the drop-in
    also overrides it.
+
+### Side buttons wired (2026-07-06)
+
+Both 13.3" Pis run `inkcast-buttons.service` (`device-client/inkcast_buttons.py`):
+the 4 side buttons publish the server's image-change MQTT commands. **13.3" button
+pins (portrait): A=GPIO5 next, B=GPIO6 previous, C=GPIO25 refresh, D=GPIO24 next** —
+C moved off GPIO16 vs the 7.3" because the EL133UF1 driver claims GPIO16/26 (found
+via `gpioinfo`; pins confirmed empirically with a `gpiod` press-detector). Verified
+end-to-end: a press logs `[press] BCM<pin> -> …/set` and the panel redraws a new photo.
