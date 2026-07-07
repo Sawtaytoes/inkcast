@@ -1,4 +1,4 @@
-import { ClockAgendaView } from "@inkcast/views/ClockAgendaView"
+import { ClockAgendaView } from "@castkit/views/ClockAgendaView"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 
 /**

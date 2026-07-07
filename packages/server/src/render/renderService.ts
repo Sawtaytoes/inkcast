@@ -1,16 +1,16 @@
-import type { DeviceMetadata } from "@inkcast/core/devices/device"
+import type { DeviceMetadata } from "@castkit/core/devices/device"
 import type {
   DitherAdjustments,
   FullColourEncoding,
-} from "@inkcast/core/pipeline/dither"
-import { createChromiumEngine } from "@inkcast/render/chromiumEngine"
-import type { RenderEngine } from "@inkcast/render/engine"
-import type { SafeAreaInset } from "@inkcast/render/renderDeviceImage"
+} from "@castkit/core/pipeline/dither"
+import { createChromiumEngine } from "@castkit/render/chromiumEngine"
+import type { RenderEngine } from "@castkit/render/engine"
+import type { SafeAreaInset } from "@castkit/render/renderDeviceImage"
 import {
   renderDeviceImage,
   resolveSafeArea,
-} from "@inkcast/render/renderDeviceImage"
-import { createSatoriEngine } from "@inkcast/render/satoriEngine"
+} from "@castkit/render/renderDeviceImage"
+import { createSatoriEngine } from "@castkit/render/satoriEngine"
 import type {
   AgendaData,
   NowPlayingData,

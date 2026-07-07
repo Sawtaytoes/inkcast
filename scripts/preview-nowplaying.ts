@@ -3,10 +3,10 @@ import { join } from "node:path"
 import {
   IMPRESSION_DEVICE,
   PHAT_DEVICE,
-} from "@inkcast/core/devices/device"
-import { createChromiumEngine } from "@inkcast/render/chromiumEngine"
-import { NowPlayingDashboard } from "@inkcast/views/NowPlayingDashboard"
-import { NowPlayingPoster } from "@inkcast/views/NowPlayingPoster"
+} from "@castkit/core/devices/device"
+import { createChromiumEngine } from "@castkit/render/chromiumEngine"
+import { NowPlayingDashboard } from "@castkit/views/NowPlayingDashboard"
+import { NowPlayingPoster } from "@castkit/views/NowPlayingPoster"
 import { createElement } from "react"
 import sharp from "sharp"
 

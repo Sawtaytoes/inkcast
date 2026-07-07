@@ -1,5 +1,5 @@
 {
-  "name": "@inkcast/server",
+  "name": "@castkit/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,10 +14,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@castkit/core": "workspace:*",
+    "@castkit/render": "workspace:*",
+    "@castkit/views": "workspace:*",
     "@hono/node-server": "^2.0.6",
-    "@inkcast/core": "workspace:*",
-    "@inkcast/render": "workspace:*",
-    "@inkcast/views": "workspace:*",
     "@scalar/hono-api-reference": "^0.11.7",
     "hono": "^4.12.27",
     "mqtt": "^5.15.1",

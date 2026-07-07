@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import { createChromiumEngine } from "@inkcast/render/chromiumEngine"
-import { ClockWeatherView } from "@inkcast/views/ClockWeatherView"
-import { NowPlayingDashboard } from "@inkcast/views/NowPlayingDashboard"
+import { createChromiumEngine } from "@castkit/render/chromiumEngine"
+import { ClockWeatherView } from "@castkit/views/ClockWeatherView"
+import { NowPlayingDashboard } from "@castkit/views/NowPlayingDashboard"
 import { createElement, type ReactElement } from "react"
 import sharp from "sharp"
 

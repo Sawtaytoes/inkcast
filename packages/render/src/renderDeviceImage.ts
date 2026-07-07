@@ -1,9 +1,9 @@
-import type { DeviceMetadata } from "@inkcast/core/devices/device"
+import type { DeviceMetadata } from "@castkit/core/devices/device"
 import type {
   DitherAdjustments,
   FullColourEncoding,
-} from "@inkcast/core/pipeline/dither"
-import { ditherToPanel } from "@inkcast/core/pipeline/dither"
+} from "@castkit/core/pipeline/dither"
+import { ditherToPanel } from "@castkit/core/pipeline/dither"
 import type { ReactElement } from "react"
 import sharp from "sharp"
 import type { RenderEngine } from "./engine.ts"

@@ -1,4 +1,4 @@
-# Inkcast decision records
+# CastKit decision records
 
 Append-only log of settled decisions (newest first). One decision per file,
 `YYYY-MM-DD-<kebab-slug>.md`. Never edit a past decision to change its meaning —
@@ -7,6 +7,10 @@ proposing a change; a settled decision here overrides default instinct.
 
 | Date | Decision | Status |
 | --- | --- | --- |
+| 2026-07-07 | [CastKit is one platform: one server, Inkcast (image) and Slatecast (browser) as client modes](2026-07-07-castkit-platform-one-server-two-client-modes.md) | Accepted |
+| 2026-07-07 | [MQTT topics unify flat under `castkit/<id>/…`; fleet migration gated on all devices online](2026-07-07-flat-castkit-topics-migration-gated.md) | Accepted |
+| 2026-07-07 | [Slatecast commands are pure MQTT through HA — no MA WebSocket, no token proxy](2026-07-07-slatecast-pure-mqtt-command-path.md) | Accepted |
+| 2026-07-07 | [Slatecast's client is a tiny Preact SPA — RSC and htmx rejected](2026-07-07-slatecast-preact-thin-client.md) | Accepted |
 | 2026-07-05 | [Device `id` is an opaque, immutable identity — location/model live only in Home Assistant](2026-07-05-device-id-is-opaque-immutable-identity.md) | Accepted |
 | 2026-07-04 | [Inkcast is a HA-agnostic renderer: HA pushes view data over MQTT; Inkcast never reads HA](2026-07-04-inkcast-renders-ha-pushed-data-not-reads-ha.md) | Accepted |
 | 2026-07-04 | [The now-playing source is an HA config entity: a per-device priority-ordered media_player list](2026-07-04-now-playing-source-is-ha-config-priority-list.md) | Superseded |

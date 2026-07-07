@@ -1,7 +1,7 @@
 import {
   type DeviceMetadata,
   DITHER_ALGORITHMS,
-} from "@inkcast/core/devices/device"
+} from "@castkit/core/devices/device"
 
 /**
  * Home Assistant MQTT-discovery payloads for an Inkcast device.

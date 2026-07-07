@@ -1,4 +1,4 @@
-import { FONT_FILE_PATHS } from "@inkcast/render/fonts"
+import { FONT_FILE_PATHS } from "@castkit/render/fonts"
 import { Resvg } from "@resvg/resvg-js"
 import sharp from "sharp"
 

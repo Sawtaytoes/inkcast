@@ -3,11 +3,11 @@ import {
   type DeviceMetadata,
   DITHER_ALGORITHMS,
   SEED_DEVICES,
-} from "@inkcast/core/devices/device"
+} from "@castkit/core/devices/device"
 import {
   E6_DEFAULT_PALETTE,
   MONO_PALETTE,
-} from "@inkcast/core/panels/palette"
+} from "@castkit/core/panels/palette"
 import * as z from "zod/mini"
 
 /**

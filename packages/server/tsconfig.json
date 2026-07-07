@@ -1,8 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    // DOM + jsx are needed because the server consumes @inkcast/render and
-    // @inkcast/views *source*: the Chromium engine references `document`
+    // DOM + jsx are needed because the server consumes @castkit/render and
+    // @castkit/views *source*: the Chromium engine references `document`
     // (inside page.evaluate) and the views are .tsx.
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "module": "NodeNext",

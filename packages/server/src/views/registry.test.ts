@@ -1,7 +1,7 @@
 import {
   IMPRESSION_DEVICE,
   PHAT_DEVICE,
-} from "@inkcast/core/devices/device"
+} from "@castkit/core/devices/device"
 import type { ReactElement } from "react"
 import { describe, expect, test } from "vitest"
 import type { AgendaData } from "../state/viewDataStore.ts"

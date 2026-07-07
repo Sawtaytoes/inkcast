@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import type { DitherAlgorithm } from "@inkcast/core/devices/device"
-import { ditherToPanel } from "@inkcast/core/pipeline/dither"
-import { createChromiumEngine } from "@inkcast/render/chromiumEngine"
+import type { DitherAlgorithm } from "@castkit/core/devices/device"
+import { ditherToPanel } from "@castkit/core/pipeline/dither"
+import { createChromiumEngine } from "@castkit/render/chromiumEngine"
 import sharp from "sharp"
 import { buildContactSheet } from "./bakeoff/contactSheet.ts"
 import {
