@@ -27,7 +27,7 @@ export type BrowserDeviceProfile = {
   width: number
   height: number
   shape: "square" | "round" | "rect"
-  touch: boolean
+  hasTouch: boolean
   colour: "mono" | "grayscale" | "e6" | "full"
 }
 
