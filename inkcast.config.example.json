@@ -7,7 +7,10 @@
     "height": 122,
     "colourMode": "mono",
     "rotation": 180,
-    "ditherProfile": { "algorithm": "atkinson", "supersampleFactor": 4 }
+    "ditherProfile": {
+      "algorithm": "atkinson",
+      "supersampleFactor": 4
+    }
   },
   {
     "id": "inky-impression",
@@ -17,6 +20,31 @@
     "height": 480,
     "colourMode": "e6",
     "rotation": 0,
-    "ditherProfile": { "algorithm": "floyd-steinberg", "supersampleFactor": 4 }
+    "ditherProfile": {
+      "algorithm": "floyd-steinberg",
+      "supersampleFactor": 4
+    }
+  },
+  {
+    "renderer": "browser",
+    "id": "media-controls",
+    "label": "Kitchen Music Controls",
+    "mac": "aa:bb:cc:00:00:03",
+    "width": 720,
+    "height": 720,
+    "shape": "square",
+    "hasTouch": true,
+    "colour": "full"
+  },
+  {
+    "renderer": "browser",
+    "id": "porthole",
+    "label": "Round Porthole Display",
+    "mac": "aa:bb:cc:00:00:04",
+    "width": 480,
+    "height": 480,
+    "shape": "round",
+    "hasTouch": false,
+    "colour": "full"
   }
 ]

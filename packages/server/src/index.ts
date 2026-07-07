@@ -8,6 +8,7 @@ import type { ConfigKnob } from "@castkit/shared/framework/configKnob"
 import { serve } from "@hono/node-server"
 import { createPhotoFrameAdapter } from "./adapters/photoFrameAdapter.ts"
 import { createApp } from "./app.ts"
+import { createBrowserMode } from "./browser/browserMode.ts"
 import {
   type ConfiguredDevice,
   loadConfig,
@@ -1688,17 +1689,28 @@ const main = async () => {
     }, 5_000)
   }
 
+  // Browser-mode (Slatecast) devices: HA discovery + MQTT routes + the
+  // /d/<id> pages and their WebSocket hub. Fully isolated from the image
+  // pipeline above.
+  const browserMode = createBrowserMode({
+    config,
+    publisher,
+  })
+  await browserMode.start()
+
   const app = createApp({
     config,
     deviceStore,
     pushController,
   })
+  const { injectWebSocket } = browserMode.attach(app)
   const server = serve({
     fetch: app.fetch,
     port: config.port,
   })
+  injectWebSocket(server)
   console.log(
-    `[inkcast] serving on :${config.port} (engine=${config.renderEngine}, mqtt=${publisher.isEnabled ? "on" : "off"}, devices=${config.devices.length})`,
+    `[castkit] serving on :${config.port} (engine=${config.renderEngine}, mqtt=${publisher.isEnabled ? "on" : "off"}, imageDevices=${config.devices.length}, browserDevices=${browserMode.deviceCount})`,
   )
 
   const shutdown = async () => {
