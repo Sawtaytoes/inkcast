@@ -13,7 +13,7 @@ import type { BrowserDeviceConfig } from "../config/env.ts"
 export type BrowserViewDefinition = {
   name: string
   clientId: string
-  needsTouch: boolean
+  isTouchRequired: boolean
 }
 
 export const BROWSER_VIEWS: readonly BrowserViewDefinition[] =
@@ -21,9 +21,13 @@ export const BROWSER_VIEWS: readonly BrowserViewDefinition[] =
     {
       name: "Now Playing",
       clientId: "now-playing",
-      needsTouch: false,
+      isTouchRequired: false,
     },
-    { name: "Queue", clientId: "queue", needsTouch: false },
+    {
+      name: "Queue",
+      clientId: "queue",
+      isTouchRequired: false,
+    },
   ]
 
 export const DEFAULT_BROWSER_VIEW = BROWSER_VIEWS[0]!
@@ -33,7 +37,7 @@ export const getBrowserViewsForDevice = (
   device: BrowserDeviceConfig,
 ): readonly BrowserViewDefinition[] =>
   BROWSER_VIEWS.filter(
-    (view) => !view.needsTouch || device.hasTouch,
+    (view) => !view.isTouchRequired || device.hasTouch,
   )
 
 export const getBrowserViewByName = (
