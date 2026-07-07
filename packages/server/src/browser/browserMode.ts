@@ -511,11 +511,7 @@ export const createBrowserMode = ({
       )
       app.use(
         "/assets/*",
-        serveStatic({
-          root: relativeDistDir,
-          rewriteRequestPath: (path) =>
-            path.replace(/^\/assets/, "/assets"),
-        }),
+        serveStatic({ root: relativeDistDir }),
       )
     } else {
       console.warn(

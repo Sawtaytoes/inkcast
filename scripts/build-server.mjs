@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process"
 import { cpSync, mkdirSync } from "node:fs"
 import { build } from "esbuild"
 
@@ -40,4 +41,17 @@ cpSync(
   { recursive: true },
 )
 
-console.log("[build] packages/server/dist/index.js + fonts")
+// The Slatecast SPA is served by the server; build it and put the dist where
+// pages.ts resolves it in prod (next to the server bundle).
+execSync("yarn workspace @castkit/slatecast build", {
+  stdio: "inherit",
+})
+cpSync(
+  "packages/slatecast/dist",
+  "packages/server/dist/slatecast",
+  { recursive: true },
+)
+
+console.log(
+  "[build] packages/server/dist/index.js + fonts + slatecast SPA",
+)

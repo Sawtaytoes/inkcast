@@ -1,4 +1,4 @@
-# Inkcast render/push server.
+# CastKit server (Inkcast image mode + Slatecast browser mode).
 #
 # The server renders with headless Chromium (Playwright), so the image bundles a
 # Chromium build. Runtime is the esbuild bundle run with plain `node` (never tsx
@@ -20,6 +20,8 @@ RUN npm install -g corepack@latest && corepack enable yarn
 # --- Dependency layer (only manifests, so source edits don't bust the install) ---
 COPY .yarnrc.yml package.json yarn.lock ./
 COPY .yarn .yarn
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/slatecast/package.json packages/slatecast/package.json
 COPY packages/core/package.json packages/core/package.json
 COPY packages/views/package.json packages/views/package.json
 COPY packages/render/package.json packages/render/package.json
