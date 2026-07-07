@@ -43,6 +43,14 @@ export const buildBrowserDeviceTopics = ({
     themeState: `${base}/theme`,
     rotationCommand: `${base}/rotation/set`,
     rotationState: `${base}/rotation`,
+    // Panel backlight (gpio-backlight, on/off only on the HyperPixels) —
+    // handled by a tiny MQTT agent ON THE KIOSK PI (castkit-backlight
+    // service), not by the server or the SPA: a browser can't reach sysfs.
+    // The agent carries its own LWT availability so the switch reflects the
+    // Pi agent, not the render server.
+    backlightCommand: `${base}/backlight/set`,
+    backlightState: `${base}/backlight`,
+    backlightAvailability: `${base}/backlight/available`,
     // View data HA pushes to this screen (retained) — same contract as the
     // image devices, plus the queue.
     nowPlayingDataCommand: `${base}/now_playing/set`,
@@ -160,6 +168,26 @@ export const buildBrowserDiscoveryMessages = ({
         command_topic: topics.themeCommand,
         state_topic: topics.themeState,
         entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
+      // Panel backlight on/off — commands are consumed by the per-Pi
+      // castkit-backlight agent (pure-MQTT peer, same contract style as the
+      // tap commands). Availability = the agent's LWT, not the server's.
+      topic: discoveryTopic("switch", "backlight"),
+      isRetained: true,
+      payload: {
+        availability_topic: topics.backlightAvailability,
+        payload_available: "online",
+        payload_not_available: "offline",
+        name: "Backlight",
+        unique_id: `castkit_${device.id}_backlight`,
+        command_topic: topics.backlightCommand,
+        state_topic: topics.backlightState,
+        payload_on: "ON",
+        payload_off: "OFF",
+        icon: "mdi:television-ambient-light",
         device: deviceBlock,
       },
     },
