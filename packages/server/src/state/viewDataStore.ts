@@ -1,6 +1,7 @@
 import type {
   AgendaData,
   NowPlayingData,
+  QueueData,
   WeatherData,
 } from "@castkit/shared/viewData/types"
 
@@ -58,6 +59,11 @@ export type ViewDataStore = {
     deviceId: string
     data: AgendaData
   }) => void
+  getQueue: (deviceId: string) => QueueData | undefined
+  setQueue: (params: {
+    deviceId: string
+    data: QueueData
+  }) => void
 }
 
 export const createViewDataStore = (): ViewDataStore => {
@@ -71,6 +77,7 @@ export const createViewDataStore = (): ViewDataStore => {
   >()
   const weatherByDeviceId = new Map<string, WeatherData>()
   const agendaByDeviceId = new Map<string, AgendaData>()
+  const queueByDeviceId = new Map<string, QueueData>()
 
   return {
     getNowPlaying: (deviceId) =>
@@ -95,6 +102,10 @@ export const createViewDataStore = (): ViewDataStore => {
     getAgenda: (deviceId) => agendaByDeviceId.get(deviceId),
     setAgenda: ({ deviceId, data }) => {
       agendaByDeviceId.set(deviceId, data)
+    },
+    getQueue: (deviceId) => queueByDeviceId.get(deviceId),
+    setQueue: ({ deviceId, data }) => {
+      queueByDeviceId.set(deviceId, data)
     },
   }
 }

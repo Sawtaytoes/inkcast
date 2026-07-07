@@ -29,6 +29,9 @@ const EnvSchema = z.object({
     "chromium",
   ),
   INKCAST_DEVICES_FILE: z.optional(z.string()),
+  // Public base URL browser-mode devices are told to load (the HA "URL"
+  // diagnostic sensor), e.g. https://castkit.octen.dev — empty in dev.
+  CASTKIT_PUBLIC_URL: z._default(z.string(), ""),
   MQTT_URL: z._default(z.string(), ""),
   MQTT_USERNAME: z._default(z.string(), ""),
   MQTT_PASSWORD: z._default(z.string(), ""),
@@ -89,6 +92,34 @@ const DeviceConfigSchema = z.object({
 })
 
 /**
+ * A browser-mode (Slatecast) device as written in the devices file: static
+ * capabilities only. Everything runtime-tunable (orientation, theme) is an
+ * HA/MQTT config knob, and the active view is HA-driven — same rules as image
+ * devices. `renderer: "browser"` is the discriminator in the shared file.
+ */
+const BrowserDeviceConfigSchema = z.object({
+  renderer: z.literal("browser"),
+  id: z.string(),
+  label: z.string(),
+  mac: z.string(),
+  width: z.int().check(z.positive()),
+  height: z.int().check(z.positive()),
+  shape: z._default(
+    z.enum(["square", "round", "rect"]),
+    "rect",
+  ),
+  hasTouch: z._default(z.boolean(), false),
+  colour: z._default(
+    z.enum(["mono", "grayscale", "e6", "full"]),
+    "full",
+  ),
+})
+
+export type BrowserDeviceConfig = z.infer<
+  typeof BrowserDeviceConfigSchema
+>
+
+/**
  * A device as the server runs it: just the core render metadata. There is no
  * per-device data-source wiring — Home Assistant pushes each display's view
  * data over MQTT, keyed by device id.
@@ -105,19 +136,38 @@ const expandDevice = (
       : E6_DEFAULT_PALETTE,
 })
 
-/** Load the real devices from the config file, or fall back to the examples. */
+/**
+ * Load the real devices from the config file, or fall back to the examples.
+ * One file holds both client modes; `renderer: "browser"` entries become
+ * browser devices, everything else parses as an image (e-ink) device.
+ */
 const loadDevices = (
   devicesFile: string | undefined,
-): readonly ConfiguredDevice[] => {
+): {
+  imageDevices: readonly ConfiguredDevice[]
+  browserDevices: readonly BrowserDeviceConfig[]
+} => {
   if (!devicesFile) {
-    return SEED_DEVICES
+    return {
+      imageDevices: SEED_DEVICES,
+      browserDevices: [],
+    }
   }
 
-  const parsed = z
-    .array(DeviceConfigSchema)
+  const rawEntries = z
+    .array(z.record(z.string(), z.unknown()))
     .parse(JSON.parse(readFileSync(devicesFile, "utf8")))
 
-  return parsed.map(expandDevice)
+  const imageDevices = rawEntries
+    .filter((entry) => entry.renderer !== "browser")
+    .map((entry) =>
+      expandDevice(DeviceConfigSchema.parse(entry)),
+    )
+  const browserDevices = rawEntries
+    .filter((entry) => entry.renderer === "browser")
+    .map((entry) => BrowserDeviceConfigSchema.parse(entry))
+
+  return { imageDevices, browserDevices }
 }
 
 export type MqttConfig = MqttConnectionConfig & {
@@ -136,6 +186,9 @@ export type InkcastConfig = {
   apiToken: string
   renderEngine: "chromium" | "satori"
   devices: readonly ConfiguredDevice[]
+  browserDevices: readonly BrowserDeviceConfig[]
+  /** Public base URL browser devices load, e.g. https://castkit.octen.dev. */
+  publicUrl: string
   mqtt: MqttConfig
   immich: ImmichSettings
 }
@@ -145,13 +198,17 @@ export const loadConfig = (
   environment: NodeJS.ProcessEnv = process.env,
 ): InkcastConfig => {
   const parsed = EnvSchema.parse(environment)
-  const devices = loadDevices(parsed.INKCAST_DEVICES_FILE)
+  const { imageDevices, browserDevices } = loadDevices(
+    parsed.INKCAST_DEVICES_FILE,
+  )
 
   return {
     port: parsed.PORT,
     apiToken: parsed.INKCAST_API_TOKEN,
     renderEngine: parsed.INKCAST_RENDER_ENGINE,
-    devices,
+    devices: imageDevices,
+    browserDevices,
+    publicUrl: parsed.CASTKIT_PUBLIC_URL,
     mqtt: {
       url: parsed.MQTT_URL,
       username: parsed.MQTT_USERNAME,
