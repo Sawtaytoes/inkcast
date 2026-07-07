@@ -1,9 +1,13 @@
 # AGENTS.md
 
-Guidelines for AI agents working on **Inkcast** — a self-hostable e-ink display
-render/push platform. Server renders per-device PNGs (React → Chromium/Satori →
-per-panel dither) and pushes them to dumb Pi-Zero-W fetchers; devices surface in
-Home Assistant via MQTT discovery.
+Guidelines for AI agents working on **CastKit** — a self-hostable home display
+platform. One server, two per-device client modes: **Inkcast** (`image` — server
+renders per-device PNGs, React → Chromium/Satori → per-panel dither, pushed over
+MQTT to dumb e-ink Pis) and **Slatecast** (`browser` — the device's kiosk browser
+loads `/d/<id>` and a tiny Preact SPA renders live, optionally touch-interactive
+views over one WebSocket). All devices surface in Home Assistant via MQTT
+discovery; HA pushes view data and executes device commands — the CastKit↔house
+contract is MQTT and nothing else.
 
 ## ⛔ Locked decisions — read before changing behavior
 
