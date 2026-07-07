@@ -53,6 +53,7 @@ describe("buildBrowserDiscoveryMessages", () => {
       "homeassistant/sensor/castkit/dev-square_url/config",
       "homeassistant/binary_sensor/castkit/dev-square_connected/config",
       "homeassistant/select/castkit/dev-square_theme/config",
+      "homeassistant/switch/castkit/dev-square_backlight/config",
       "homeassistant/select/castkit/dev-square_rotation/config",
     ])
     expect(
@@ -75,10 +76,12 @@ describe("buildBrowserDiscoveryMessages", () => {
     })
   })
 
-  test("availability points at the bridge topic", () => {
+  test("availability points at the bridge topic (backlight: the Pi agent's LWT)", () => {
     messages.forEach((message) => {
       expect(message.payload.availability_topic).toBe(
-        "castkit/availability",
+        message.topic.includes("_backlight/")
+          ? "castkit/dev-square/backlight/available"
+          : "castkit/availability",
       )
     })
   })
