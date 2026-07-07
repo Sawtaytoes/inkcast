@@ -1,7 +1,7 @@
 import {
   IMPRESSION_DEVICE,
   PHAT_DEVICE,
-} from "@inkcast/core/devices/device"
+} from "@castkit/core/devices/device"
 import { createElement } from "react"
 import sharp from "sharp"
 import { describe, expect, test } from "vitest"

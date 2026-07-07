@@ -1,7 +1,7 @@
 import {
   IMPRESSION_DEVICE,
   PHAT_DEVICE,
-} from "@inkcast/core/devices/device"
+} from "@castkit/core/devices/device"
 import { type CSSProperties, useState } from "react"
 import { PanelFrame } from "./PanelFrame.tsx"
 

@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import { createChromiumEngine } from "@inkcast/render/chromiumEngine"
-import { createSatoriEngine } from "@inkcast/render/satoriEngine"
+import { createChromiumEngine } from "@castkit/render/chromiumEngine"
+import { createSatoriEngine } from "@castkit/render/satoriEngine"
 import { buildContactSheet } from "./bakeoff/contactSheet.ts"
 import {
   buildNowPlayingElement,

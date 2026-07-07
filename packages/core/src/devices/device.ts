@@ -70,7 +70,7 @@ export type DeviceMetadata = {
 // NOTE: these are generic EXAMPLE devices — placeholder MACs, no room labels —
 // safe to commit to a public repo. A real deployment supplies its own devices
 // (real MACs, names, rotation, dither choices) from a gitignored config the
-// server loads at startup; see @inkcast/server config. Panel geometry/palette
+// server loads at startup; see @castkit/server config. Panel geometry/palette
 // here are hardware facts, not house-specific.
 
 /**

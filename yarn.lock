@@ -285,6 +285,91 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@castkit/core@workspace:*, @castkit/core@workspace:packages/core":
+  version: 0.0.0-use.local
+  resolution: "@castkit/core@workspace:packages/core"
+  dependencies:
+    image-q: "npm:^4.0.0"
+    sharp: "npm:^0.35.3"
+    tsx: "npm:^4.22.4"
+    typescript: "npm:^6.0.3"
+    vitest: "npm:^4.1.9"
+  languageName: unknown
+  linkType: soft
+
+"@castkit/render@workspace:*, @castkit/render@workspace:packages/render":
+  version: 0.0.0-use.local
+  resolution: "@castkit/render@workspace:packages/render"
+  dependencies:
+    "@castkit/core": "workspace:*"
+    "@castkit/views": "workspace:*"
+    "@resvg/resvg-js": "npm:^2.6.2"
+    "@types/react": "npm:^19.2.17"
+    "@types/react-dom": "npm:^19.2.3"
+    playwright: "npm:^1.61.1"
+    react: "npm:^19.2.7"
+    react-dom: "npm:^19.2.7"
+    satori: "npm:^0.26.0"
+    sharp: "npm:^0.35.3"
+    tsx: "npm:^4.22.4"
+    typescript: "npm:^6.0.3"
+    vitest: "npm:^4.1.9"
+  languageName: unknown
+  linkType: soft
+
+"@castkit/server@workspace:packages/server":
+  version: 0.0.0-use.local
+  resolution: "@castkit/server@workspace:packages/server"
+  dependencies:
+    "@castkit/core": "workspace:*"
+    "@castkit/render": "workspace:*"
+    "@castkit/views": "workspace:*"
+    "@hono/node-server": "npm:^2.0.6"
+    "@scalar/hono-api-reference": "npm:^0.11.7"
+    "@types/node": "npm:^26.1.0"
+    "@types/react": "npm:^19.2.17"
+    hono: "npm:^4.12.27"
+    mqtt: "npm:^5.15.1"
+    react: "npm:^19.2.7"
+    rxjs: "npm:^7.8.2"
+    tsx: "npm:^4.22.4"
+    typescript: "npm:^6.0.3"
+    vitest: "npm:^4.1.9"
+    zod: "npm:^4.4.3"
+  languageName: unknown
+  linkType: soft
+
+"@castkit/views@workspace:*, @castkit/views@workspace:packages/views":
+  version: 0.0.0-use.local
+  resolution: "@castkit/views@workspace:packages/views"
+  dependencies:
+    "@types/react": "npm:^19.2.17"
+    react: "npm:^19.2.7"
+    typescript: "npm:^6.0.3"
+  peerDependencies:
+    react: ^19.2.7
+  languageName: unknown
+  linkType: soft
+
+"@castkit/web@workspace:packages/web":
+  version: 0.0.0-use.local
+  resolution: "@castkit/web@workspace:packages/web"
+  dependencies:
+    "@castkit/core": "workspace:*"
+    "@castkit/views": "workspace:*"
+    "@storybook/addon-docs": "npm:^10.4.6"
+    "@storybook/react-vite": "npm:^10.4.6"
+    "@types/react": "npm:^19.2.17"
+    "@types/react-dom": "npm:^19.2.3"
+    "@vitejs/plugin-react": "npm:^6.0.3"
+    react: "npm:^19.2.7"
+    react-dom: "npm:^19.2.7"
+    storybook: "npm:^10.4.6"
+    typescript: "npm:^6.0.3"
+    vite: "npm:^8.1.2"
+  languageName: unknown
+  linkType: soft
+
 "@emnapi/core@npm:1.11.1":
   version: 1.11.1
   resolution: "@emnapi/core@npm:1.11.1"
@@ -881,91 +966,6 @@ __metadata:
   conditions: os=win32 & cpu=x64
   languageName: node
   linkType: hard
-
-"@inkcast/core@workspace:*, @inkcast/core@workspace:packages/core":
-  version: 0.0.0-use.local
-  resolution: "@inkcast/core@workspace:packages/core"
-  dependencies:
-    image-q: "npm:^4.0.0"
-    sharp: "npm:^0.35.3"
-    tsx: "npm:^4.22.4"
-    typescript: "npm:^6.0.3"
-    vitest: "npm:^4.1.9"
-  languageName: unknown
-  linkType: soft
-
-"@inkcast/render@workspace:*, @inkcast/render@workspace:packages/render":
-  version: 0.0.0-use.local
-  resolution: "@inkcast/render@workspace:packages/render"
-  dependencies:
-    "@inkcast/core": "workspace:*"
-    "@inkcast/views": "workspace:*"
-    "@resvg/resvg-js": "npm:^2.6.2"
-    "@types/react": "npm:^19.2.17"
-    "@types/react-dom": "npm:^19.2.3"
-    playwright: "npm:^1.61.1"
-    react: "npm:^19.2.7"
-    react-dom: "npm:^19.2.7"
-    satori: "npm:^0.26.0"
-    sharp: "npm:^0.35.3"
-    tsx: "npm:^4.22.4"
-    typescript: "npm:^6.0.3"
-    vitest: "npm:^4.1.9"
-  languageName: unknown
-  linkType: soft
-
-"@inkcast/server@workspace:packages/server":
-  version: 0.0.0-use.local
-  resolution: "@inkcast/server@workspace:packages/server"
-  dependencies:
-    "@hono/node-server": "npm:^2.0.6"
-    "@inkcast/core": "workspace:*"
-    "@inkcast/render": "workspace:*"
-    "@inkcast/views": "workspace:*"
-    "@scalar/hono-api-reference": "npm:^0.11.7"
-    "@types/node": "npm:^26.1.0"
-    "@types/react": "npm:^19.2.17"
-    hono: "npm:^4.12.27"
-    mqtt: "npm:^5.15.1"
-    react: "npm:^19.2.7"
-    rxjs: "npm:^7.8.2"
-    tsx: "npm:^4.22.4"
-    typescript: "npm:^6.0.3"
-    vitest: "npm:^4.1.9"
-    zod: "npm:^4.4.3"
-  languageName: unknown
-  linkType: soft
-
-"@inkcast/views@workspace:*, @inkcast/views@workspace:packages/views":
-  version: 0.0.0-use.local
-  resolution: "@inkcast/views@workspace:packages/views"
-  dependencies:
-    "@types/react": "npm:^19.2.17"
-    react: "npm:^19.2.7"
-    typescript: "npm:^6.0.3"
-  peerDependencies:
-    react: ^19.2.7
-  languageName: unknown
-  linkType: soft
-
-"@inkcast/web@workspace:packages/web":
-  version: 0.0.0-use.local
-  resolution: "@inkcast/web@workspace:packages/web"
-  dependencies:
-    "@inkcast/core": "workspace:*"
-    "@inkcast/views": "workspace:*"
-    "@storybook/addon-docs": "npm:^10.4.6"
-    "@storybook/react-vite": "npm:^10.4.6"
-    "@types/react": "npm:^19.2.17"
-    "@types/react-dom": "npm:^19.2.3"
-    "@vitejs/plugin-react": "npm:^6.0.3"
-    react: "npm:^19.2.7"
-    react-dom: "npm:^19.2.7"
-    storybook: "npm:^10.4.6"
-    typescript: "npm:^6.0.3"
-    vite: "npm:^8.1.2"
-  languageName: unknown
-  linkType: soft
 
 "@isaacs/fs-minipass@npm:^4.0.0":
   version: 4.0.1
@@ -2685,6 +2685,32 @@ __metadata:
   languageName: node
   linkType: hard
 
+"castkit@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "castkit@workspace:."
+  dependencies:
+    "@biomejs/biome": "npm:^2.5.2"
+    "@castkit/core": "workspace:*"
+    "@castkit/render": "workspace:*"
+    "@castkit/views": "workspace:*"
+    "@playwright/test": "npm:^1.61.1"
+    "@resvg/resvg-js": "npm:^2.6.2"
+    "@types/node": "npm:^26.1.0"
+    "@vitest/eslint-plugin": "npm:^1.6.20"
+    esbuild: "npm:^0.28.1"
+    eslint: "npm:^10.6.0"
+    eslint-plugin-react: "npm:^7.37.5"
+    playwright: "npm:^1.61.1"
+    react: "npm:^19.2.7"
+    rimraf: "npm:^6.1.3"
+    sharp: "npm:^0.35.3"
+    tsx: "npm:^4.22.4"
+    typescript: "npm:^6.0.3"
+    typescript-eslint: "npm:^8.62.1"
+    vitest: "npm:^4.1.9"
+  languageName: unknown
+  linkType: soft
+
 "chai@npm:^5.2.0":
   version: 5.3.3
   resolution: "chai@npm:5.3.3"
@@ -3853,32 +3879,6 @@ __metadata:
   checksum: 10c0/4e531f648b29039fb7426fb94075e6545faa1eb9fe83c29f0b6d9e7263aceb4289d2d4557db0d428188eeb449cc7c5e77b0a0b2c4e248ff2a65933a0dee49ef2
   languageName: node
   linkType: hard
-
-"inkcast@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "inkcast@workspace:."
-  dependencies:
-    "@biomejs/biome": "npm:^2.5.2"
-    "@inkcast/core": "workspace:*"
-    "@inkcast/render": "workspace:*"
-    "@inkcast/views": "workspace:*"
-    "@playwright/test": "npm:^1.61.1"
-    "@resvg/resvg-js": "npm:^2.6.2"
-    "@types/node": "npm:^26.1.0"
-    "@vitest/eslint-plugin": "npm:^1.6.20"
-    esbuild: "npm:^0.28.1"
-    eslint: "npm:^10.6.0"
-    eslint-plugin-react: "npm:^7.37.5"
-    playwright: "npm:^1.61.1"
-    react: "npm:^19.2.7"
-    rimraf: "npm:^6.1.3"
-    sharp: "npm:^0.35.3"
-    tsx: "npm:^4.22.4"
-    typescript: "npm:^6.0.3"
-    typescript-eslint: "npm:^8.62.1"
-    vitest: "npm:^4.1.9"
-  languageName: unknown
-  linkType: soft
 
 "internal-slot@npm:^1.1.0":
   version: 1.1.0

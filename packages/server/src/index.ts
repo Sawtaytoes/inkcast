@@ -3,8 +3,8 @@ import { serve } from "@hono/node-server"
 import {
   DITHER_ALGORITHMS,
   type DitherAlgorithm,
-} from "@inkcast/core/devices/device"
-import type { FullColourEncoding } from "@inkcast/core/pipeline/dither"
+} from "@castkit/core/devices/device"
+import type { FullColourEncoding } from "@castkit/core/pipeline/dither"
 import { createPhotoFrameAdapter } from "./adapters/photoFrameAdapter.ts"
 import { createApp } from "./app.ts"
 import {
@@ -57,7 +57,7 @@ import {
  */
 /**
  * Load a local `.env` if present (gitignored) — from the working directory
- * or the repo root (so `yarn workspace @inkcast/server dev`, whose cwd is
+ * or the repo root (so `yarn workspace @castkit/server dev`, whose cwd is
  * `packages/server`, finds it too). In containers, env is usually passed
  * directly, so a missing file is fine.
  */

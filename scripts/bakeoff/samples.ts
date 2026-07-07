@@ -1,9 +1,9 @@
 import {
   IMPRESSION_DEVICE,
   PHAT_DEVICE,
-} from "@inkcast/core/devices/device"
-import type { Palette } from "@inkcast/core/panels/palette"
-import { NowPlayingPoster } from "@inkcast/views/NowPlayingPoster"
+} from "@castkit/core/devices/device"
+import type { Palette } from "@castkit/core/panels/palette"
+import { NowPlayingPoster } from "@castkit/views/NowPlayingPoster"
 import { createElement } from "react"
 import sharp from "sharp"
 

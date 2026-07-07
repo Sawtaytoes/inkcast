@@ -1,4 +1,4 @@
-import type { DitherAlgorithm } from "@inkcast/core/devices/device"
+import type { DitherAlgorithm } from "@castkit/core/devices/device"
 
 /**
  * A colour-rendering override for a colour panel: "bw" renders the view in

@@ -9,7 +9,7 @@ FROM node:24-slim AS base
 WORKDIR /app
 
 # Link the GHCR package to the repo.
-LABEL org.opencontainers.image.source="https://github.com/Sawtaytoes/inkcast"
+LABEL org.opencontainers.image.source="https://github.com/Sawtaytoes/castkit"
 
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 ENV NODE_ENV=production
@@ -40,4 +40,4 @@ EXPOSE 8788
 
 # Config comes from the environment (see .env.example). Mount a .env or pass
 # -e vars; nothing house-specific is baked into the image.
-CMD ["yarn", "workspace", "@inkcast/server", "start:prod"]
+CMD ["yarn", "workspace", "@castkit/server", "start:prod"]

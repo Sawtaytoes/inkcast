@@ -1,4 +1,4 @@
-import { NowPlayingPoster } from "@inkcast/views/NowPlayingPoster"
+import { NowPlayingPoster } from "@castkit/views/NowPlayingPoster"
 import type { CSSProperties } from "react"
 
 /**

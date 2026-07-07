@@ -1,5 +1,5 @@
-import { MONO_PALETTE } from "@inkcast/core/panels/palette"
-import type { FullColourEncoding } from "@inkcast/core/pipeline/dither"
+import { MONO_PALETTE } from "@castkit/core/panels/palette"
+import type { FullColourEncoding } from "@castkit/core/pipeline/dither"
 import type { ConfiguredDevice } from "./config/env.ts"
 import { buildDeviceTopics } from "./homeAssistant/discovery.ts"
 import type { MqttPublisher } from "./mqtt/publisher.ts"
