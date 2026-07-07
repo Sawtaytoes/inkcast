@@ -192,7 +192,7 @@ const buildDeviceBlock = (device: DeviceMetadata) => ({
   identifiers: [`inkcast_${device.id}`],
   connections: [["mac", device.mac]],
   name: device.label,
-  manufacturer: "Inkcast",
+  manufacturer: "CastKit",
   model: `${device.colourMode} ${device.width}×${device.height}`,
 })
 
@@ -619,9 +619,11 @@ export const buildGlobalDiscoveryMessages = (
     payload_not_available: "offline",
   }
   const serverDeviceBlock = {
+    // identifiers/unique_ids keep the historical "inkcast_" prefix so HA
+    // doesn't recreate entities — only the display strings are CastKit.
     identifiers: ["inkcast_server"],
-    name: "Inkcast Server",
-    manufacturer: "Inkcast",
+    name: "CastKit Server",
+    manufacturer: "CastKit",
     model: "render server",
   }
 

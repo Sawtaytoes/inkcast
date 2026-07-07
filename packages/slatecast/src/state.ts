@@ -8,6 +8,7 @@ import type {
 import type {
   NowPlayingData,
   QueueData,
+  WeatherData,
 } from "@castkit/shared/viewData/types"
 import { computed, signal } from "@preact/signals"
 
@@ -54,10 +55,13 @@ export const nowPlaying = signal<NowPlayingData | null>(
 export const queue = signal<QueueData | null>(
   inlineSnapshot?.data.queue ?? null,
 )
+export const weather = signal<WeatherData | null>(
+  inlineSnapshot?.data.weather ?? null,
+)
 export const isConnected = signal(false)
 
-/** Ticks each second so the seek bar advances between pushes. */
-const nowMs = signal(Date.now())
+/** Ticks each second so the seek bar and ambient clock advance between pushes. */
+export const nowMs = signal(Date.now())
 setInterval(() => {
   nowMs.value = Date.now()
 }, 1_000)
@@ -90,6 +94,7 @@ const applyMessage = (message: ServerToClientMessage) => {
     activeView.value = message.view
     nowPlaying.value = message.data.nowPlaying ?? null
     queue.value = message.data.queue ?? null
+    weather.value = message.data.weather ?? null
     return
   }
   if (message.type === "view") {
@@ -108,10 +113,14 @@ const applyMessage = (message: ServerToClientMessage) => {
     settings.value = message.settings
     return
   }
+  if (message.type === "weather") {
+    weather.value = message.data
+    return
+  }
   if (message.type === "reload") {
     window.location.reload()
   }
-  // weather/agenda arrive with the ambient views (later milestone).
+  // agenda arrives with its ambient view (later milestone).
 }
 
 let socket: WebSocket | null = null

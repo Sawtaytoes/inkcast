@@ -315,3 +315,44 @@ body {
   color: var(--fg-dim);
   opacity: 0.6;
 }
+
+/* --- Ambient (clock + date + weather) --- */
+
+.ambient {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2vmin;
+  text-align: center;
+}
+
+.ambient-time {
+  font-size: 17vmin;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ambient-date {
+  font-size: 5vmin;
+  color: var(--fg-dim);
+}
+
+.ambient-weather {
+  display: flex;
+  align-items: baseline;
+  gap: 2.5vmin;
+  margin-top: 3vmin;
+}
+
+.ambient-temp {
+  font-size: 8vmin;
+  font-weight: 600;
+}
+
+.ambient-condition {
+  font-size: 5vmin;
+  color: var(--fg-dim);
+}

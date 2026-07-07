@@ -28,6 +28,11 @@ export const BROWSER_VIEWS: readonly BrowserViewDefinition[] =
       clientId: "queue",
       isTouchRequired: false,
     },
+    {
+      name: "Ambient",
+      clientId: "ambient",
+      isTouchRequired: false,
+    },
   ]
 
 export const DEFAULT_BROWSER_VIEW = BROWSER_VIEWS[0]!

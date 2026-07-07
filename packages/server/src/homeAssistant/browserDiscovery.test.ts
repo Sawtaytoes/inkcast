@@ -88,6 +88,7 @@ describe("buildBrowserDiscoveryMessages", () => {
     expect(viewSelect.payload.options).toEqual([
       "Now Playing",
       "Queue",
+      "Ambient",
     ])
   })
 })

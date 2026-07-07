@@ -5,6 +5,7 @@ import {
   device,
   settings,
 } from "./state.ts"
+import { Ambient } from "./views/Ambient.tsx"
 import { NowPlaying } from "./views/NowPlaying.tsx"
 import { Queue } from "./views/Queue.tsx"
 import "./styles.css"
@@ -44,6 +45,8 @@ const App = () => {
     >
       {activeView.value === "queue" ? (
         <Queue />
+      ) : activeView.value === "ambient" ? (
+        <Ambient />
       ) : (
         <NowPlaying />
       )}

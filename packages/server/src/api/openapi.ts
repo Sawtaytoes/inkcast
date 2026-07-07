@@ -53,7 +53,7 @@ export const buildOpenApiDocument = ({
   return {
     openapi: "3.1.0",
     info: {
-      title: "Inkcast API",
+      title: "CastKit API",
       version: "0.1.0",
       description:
         "Render and push e-ink device screens. List devices, fetch the current rendered image, force a refresh, or switch a device's active view. The same actions are available over MQTT.",

@@ -104,7 +104,7 @@ describe("buildDiscoveryMessages", () => {
           name: string
         }
       ).name,
-    ).toBe("Inkcast Server")
+    ).toBe("CastKit Server")
   })
 
   test("adds the colour-mode select on a colour panel only", () => {
