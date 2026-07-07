@@ -1,0 +1,323 @@
+/*
+ * Slatecast kiosk styles. Hand-rolled, no UI kit — the whole app must stay
+ * under the 60 KB gz budget and render calmly on WPE. Dark by default (wall
+ * screens), light honored via theme. No cursor, no text selection, no
+ * overscroll — this is an appliance, not a web page.
+ */
+
+:root {
+  --bg: #101014;
+  --fg: #f2f2f5;
+  --fg-dim: #9a9aa5;
+  --surface: #1c1c22;
+  --accent: #7aa2f7;
+}
+
+.stage[data-theme="light"] {
+  --bg: #f4f4f6;
+  --fg: #16161a;
+  --fg-dim: #5c5c66;
+  --surface: #e4e4ea;
+}
+
+@media (prefers-color-scheme: light) {
+  .stage[data-theme="auto"] {
+    --bg: #f4f4f6;
+    --fg: #16161a;
+    --fg-dim: #5c5c66;
+    --surface: #e4e4ea;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--bg);
+  /* An appliance never shows a pointer (kiosk blank-cursor theme backs this up). */
+  cursor: none;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--fg);
+  font-family:
+    system-ui, -apple-system, "Segoe UI", sans-serif;
+  transform-origin: center center;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+
+/* Circle-safe: everything inset so a round bezel can't clip content. */
+.stage.shape-round {
+  padding: 9%;
+}
+
+/* ————— Now Playing ————— */
+
+.now-playing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.5vmin;
+  width: 100%;
+  height: 100%;
+  padding: 4vmin;
+  justify-content: center;
+}
+
+.artwork {
+  width: 42vmin;
+  height: 42vmin;
+  border-radius: 2.5vmin;
+  object-fit: cover;
+  box-shadow: 0 1.5vmin 6vmin
+    color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--surface);
+}
+
+.stage.touchless .artwork {
+  width: 52vmin;
+  height: 52vmin;
+}
+
+.artwork.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14vmin;
+  color: var(--fg-dim);
+}
+
+.track {
+  text-align: center;
+  max-width: 88%;
+}
+
+.title {
+  font-size: 5vmin;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.artist {
+  font-size: 3.6vmin;
+  color: var(--accent);
+  margin-top: 0.8vmin;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.album {
+  font-size: 2.8vmin;
+  color: var(--fg-dim);
+  margin-top: 0.5vmin;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ————— Seek ————— */
+
+.seek {
+  display: flex;
+  align-items: center;
+  gap: 2vmin;
+  width: 86%;
+}
+
+.seek-time {
+  font-size: 2.6vmin;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+  min-width: 8vmin;
+  text-align: center;
+}
+
+.seek-track {
+  flex: 1;
+  height: 1.2vmin;
+  border-radius: 0.6vmin;
+  background: var(--surface);
+  position: relative;
+}
+
+/* A fat touch target without a fat bar. */
+.seek-track.interactive {
+  touch-action: none;
+}
+
+.seek-track.interactive::before {
+  content: "";
+  position: absolute;
+  inset: -3vmin 0;
+}
+
+.seek-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .seek-fill {
+    transition: width 0.4s linear;
+  }
+}
+
+/* ————— Transport + volume ————— */
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 6vmin;
+}
+
+.transport button,
+.volume button {
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-size: 6vmin;
+  line-height: 1;
+  padding: 1.5vmin;
+  cursor: none;
+}
+
+.transport .play-pause {
+  font-size: 9vmin;
+  width: 14vmin;
+  height: 14vmin;
+  border-radius: 50%;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.transport button:active,
+.volume button:active {
+  color: var(--accent);
+}
+
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 2.5vmin;
+  width: 70%;
+}
+
+.volume input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+  height: 1.2vmin;
+}
+
+/* ————— Queue ————— */
+
+.queue {
+  list-style: none;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  padding: 3vmin;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5vmin;
+}
+
+.queue li {
+  display: flex;
+  align-items: center;
+  gap: 2.5vmin;
+  padding: 1.5vmin 2vmin;
+  border-radius: 1.5vmin;
+}
+
+.queue li.current {
+  background: var(--surface);
+  box-shadow: inset 0.5vmin 0 0 var(--accent);
+}
+
+.queue-art {
+  width: 9vmin;
+  height: 9vmin;
+  border-radius: 1vmin;
+  object-fit: cover;
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.queue-art.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-dim);
+  font-size: 4vmin;
+}
+
+.queue-track {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-title {
+  font-size: 3.2vmin;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-artist {
+  font-size: 2.6vmin;
+  color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-duration {
+  font-size: 2.6vmin;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ————— Idle ————— */
+
+.idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2vmin;
+}
+
+.idle-title {
+  font-size: 5vmin;
+  color: var(--fg-dim);
+}
+
+.idle-label {
+  font-size: 3vmin;
+  color: var(--fg-dim);
+  opacity: 0.6;
+}
