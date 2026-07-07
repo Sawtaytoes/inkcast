@@ -1,0 +1,22 @@
+{
+  "name": "@castkit/slatecast",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The browser-mode (Slatecast) SPA: a tiny Preact + signals client the CastKit server serves at /d/<id>. Renders live, optionally touch-interactive views on kiosk browsers (Chromium/WPE) with a <60 KB gz budget.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@castkit/shared": "workspace:*",
+    "@preact/signals": "^2.5.1",
+    "preact": "^10.29.1"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.2",
+    "typescript": "^6.0.3",
+    "vite": "^7.3.4"
+  }
+}
