@@ -48,11 +48,13 @@ jobs:
       - name: Build image
         run: |
           docker build \
-            -t ghcr.io/sawtaytoes/inkcast:latest \
-            -t ghcr.io/sawtaytoes/inkcast:${{ github.sha }} \
+            -t ghcr.io/sawtaytoes/castkit:latest \
+            -t ghcr.io/sawtaytoes/castkit:${{ github.sha }} \
             .
 
       - name: Push image
         run: |
-          docker push ghcr.io/sawtaytoes/inkcast:latest
-          docker push ghcr.io/sawtaytoes/inkcast:${{ github.sha }}
+          # The old inkcast image stays frozen at its pre-rename tag until the
+          # fleet topic migration retires the inkcast TrueNAS app.
+          docker push ghcr.io/sawtaytoes/castkit:latest
+          docker push ghcr.io/sawtaytoes/castkit:${{ github.sha }}
