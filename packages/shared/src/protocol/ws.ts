@@ -13,11 +13,20 @@ import type { DeviceCommand } from "./commands.ts"
  * A `view` message swaps the active view without a page reload.
  */
 
+/**
+ * Default Photo Frame rotation interval (minutes) when Home Assistant hasn't
+ * set one. Shared by the server settings defaults and the client fallback so
+ * both agree before the first retained value arrives.
+ */
+export const DEFAULT_PHOTO_INTERVAL_MINUTES = 10
+
 /** Dynamic per-device settings the browser applies live (no reload). */
 export type BrowserDeviceSettings = {
   /** Clockwise degrees the client applies as a CSS transform. */
   orientation: 0 | 90 | 180 | 270
   theme: "Auto" | "Dark" | "Light"
+  /** Photo Frame rotation interval, minutes — the SPA rotates client-side. */
+  photoIntervalMinutes: number
 }
 
 /** Static capabilities inlined into the page shell and the snapshot. */

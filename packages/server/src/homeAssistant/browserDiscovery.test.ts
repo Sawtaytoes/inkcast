@@ -55,6 +55,9 @@ describe("buildBrowserDiscoveryMessages", () => {
       "homeassistant/select/castkit/dev-square_theme/config",
       "homeassistant/switch/castkit/dev-square_backlight/config",
       "homeassistant/select/castkit/dev-square_rotation/config",
+      "homeassistant/text/castkit/dev-square_photo_people/config",
+      "homeassistant/text/castkit/dev-square_photo_query/config",
+      "homeassistant/number/castkit/dev-square_photo_interval/config",
     ])
     expect(
       messages.every((message) => message.isRetained),
@@ -95,6 +98,7 @@ describe("buildBrowserDiscoveryMessages", () => {
       "Clock",
       "Weather",
       "Calendar",
+      "Photo Frame",
     ])
   })
 })
