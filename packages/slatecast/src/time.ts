@@ -1,38 +1,95 @@
+import type { BrowserClockConfig } from "@castkit/shared/protocol/ws"
+
 /**
  * Client-side clock formatting shared by every browser view that shows a clock
- * (Ambient, Clock, Weather, Calendar). Time is device-local — off the kiosk's
- * own timezone and the shared 1 Hz `nowMs` tick — exactly as the Ambient view
- * has always rendered it.
- *
- * NOTE: this does NOT yet honour the global Home Assistant Clock:* knobs
- * (12/24-hour, date style, timezone) that image-mode devices respect. Those
- * live on the "CastKit Server" device and are resolved server-side at render
- * time; wiring them into the browser snapshot/settings is a tracked follow-up.
+ * (Ambient, Clock, Weather, Calendar). Formatting is pure `Intl`
+ * (`toLocaleTimeString`/`toLocaleDateString`), honouring the server-stamped
+ * global clock config: `timeZone` (IANA), 12/24-hour, and long/numeric date —
+ * the same Home Assistant Clock:* knobs the e-ink devices respect. Absent
+ * config falls back to the device's own timezone in 12-hour / long form.
  */
-export const formatClockTime = (millis: number) =>
-  new Date(millis).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
+
+const DEFAULT_CLOCK: BrowserClockConfig = {
+  isTwelveHour: true,
+  isNumericDate: false,
+}
+
+/**
+ * `Intl` throws a RangeError on an unknown `timeZone` string. Retry once
+ * without it so a stray value can never blank the clock — it just renders in
+ * the device-local zone instead.
+ */
+const formatSafely = ({
+  millis,
+  options,
+  timeZone,
+}: {
+  millis: number
+  options: Intl.DateTimeFormatOptions
+  timeZone?: string
+}) => {
+  const date = new Date(millis)
+  if (!timeZone) {
+    return date.toLocaleString("en-US", options)
+  }
+  try {
+    return date.toLocaleString("en-US", {
+      ...options,
+      timeZone,
+    })
+  } catch {
+    return date.toLocaleString("en-US", options)
+  }
+}
+
+export const formatClockTime = (
+  millis: number,
+  clock: BrowserClockConfig = DEFAULT_CLOCK,
+) =>
+  formatSafely({
+    millis,
+    timeZone: clock.timeZone,
+    options: {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: clock.isTwelveHour,
+    },
   })
 
-export const formatClockDate = (millis: number) =>
-  new Date(millis).toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
+export const formatClockDate = (
+  millis: number,
+  clock: BrowserClockConfig = DEFAULT_CLOCK,
+) =>
+  formatSafely({
+    millis,
+    timeZone: clock.timeZone,
+    options: clock.isNumericDate
+      ? {
+          month: "numeric",
+          day: "numeric",
+          year: "numeric",
+        }
+      : { weekday: "long", month: "long", day: "numeric" },
   })
 
 /** Short wall-clock time for a calendar row (all-day events show "All day"). */
 export const formatEventTime = ({
   startMillis,
   isAllDay,
+  clock = DEFAULT_CLOCK,
 }: {
   startMillis: number
   isAllDay: boolean
+  clock?: BrowserClockConfig
 }) =>
   isAllDay
     ? "All day"
-    : new Date(startMillis).toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
+    : formatSafely({
+        millis: startMillis,
+        timeZone: clock.timeZone,
+        options: {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: clock.isTwelveHour,
+        },
       })

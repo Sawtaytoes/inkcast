@@ -1,4 +1,4 @@
-import { nowMs } from "../state.ts"
+import { clockConfig, nowMs } from "../state.ts"
 import {
   formatClockDate,
   formatClockTime,
@@ -13,10 +13,10 @@ import {
 export const Clock = () => (
   <div class="ambient">
     <div class="ambient-time">
-      {formatClockTime(nowMs.value)}
+      {formatClockTime(nowMs.value, clockConfig.value)}
     </div>
     <div class="ambient-date">
-      {formatClockDate(nowMs.value)}
+      {formatClockDate(nowMs.value, clockConfig.value)}
     </div>
   </div>
 )

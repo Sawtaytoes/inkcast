@@ -363,6 +363,27 @@ const main = async () => {
     }
   }
 
+  /**
+   * The GLOBAL clock config (no per-device override) that browser devices
+   * format against — the server-wide Clock:* knobs, same source the image
+   * devices resolve from.
+   */
+  const getGlobalClockConfig = () => {
+    const timeFormat =
+      deviceConfigStore.getGlobalClockTimeFormat() ??
+      DEFAULT_CLOCK_TIME_FORMAT
+    const dateStyle =
+      deviceConfigStore.getGlobalClockDateStyle() ??
+      DEFAULT_CLOCK_DATE_STYLE
+    return {
+      timeZone:
+        deviceConfigStore.getGlobalClockTimezone() ||
+        undefined,
+      isTwelveHour: timeFormat === "12h",
+      isNumericDate: dateStyle === "numeric",
+    }
+  }
+
   const pushController = createPushController({
     devices: config.devices,
     deviceStore,
@@ -1695,6 +1716,7 @@ const main = async () => {
   const browserMode = createBrowserMode({
     config,
     publisher,
+    getGlobalClockConfig,
   })
   await browserMode.start()
 

@@ -2,6 +2,8 @@ import { relative } from "node:path"
 import type { MqttPublisher } from "@castkit/shared/mqtt/publisher"
 import { parseDeviceCommand } from "@castkit/shared/protocol/commands"
 import type {
+  BrowserClockConfig,
+  BrowserDeviceSettings,
   ServerToClientMessage,
   ViewDataState,
 } from "@castkit/shared/protocol/ws"
@@ -20,6 +22,7 @@ import {
   buildBrowserDiscoveryMessages,
   THEME_OPTIONS,
 } from "../homeAssistant/browserDiscovery.ts"
+import { buildGlobalTopics } from "../homeAssistant/discovery.ts"
 import {
   fetchFaceBoxes,
   fetchPreviewJpeg,
@@ -90,12 +93,19 @@ export type BrowserMode = ReturnType<
 export const createBrowserMode = ({
   config,
   publisher,
+  getGlobalClockConfig,
 }: {
   config: InkcastConfig
   publisher: MqttPublisher
+  /**
+   * The resolved global clock config (timezone / 12-24h / date style) stamped
+   * onto every settings payload so browser clocks match the e-ink devices.
+   */
+  getGlobalClockConfig: () => BrowserClockConfig
 }) => {
   const devices = config.browserDevices
   const { baseTopic } = config.mqtt
+  const globalTopics = buildGlobalTopics(baseTopic)
   const stateStore = createBrowserStateStore({ devices })
   const viewDataStore = createViewDataStore()
   const photoConfigStore = createBrowserPhotoConfigStore()
@@ -156,6 +166,14 @@ export const createBrowserMode = ({
     }
   }
 
+  /** The device's settings with the current global clock config stamped on. */
+  const settingsWithClock = (
+    deviceId: string,
+  ): BrowserDeviceSettings => ({
+    ...stateStore.getSettings(deviceId),
+    clock: getGlobalClockConfig(),
+  })
+
   const buildSnapshot = (
     deviceId: string,
   ): Extract<
@@ -180,7 +198,7 @@ export const createBrowserMode = ({
         hasTouch: device.hasTouch,
         colour: device.colour,
       },
-      settings: stateStore.getSettings(deviceId),
+      settings: settingsWithClock(deviceId),
       view:
         activeView?.clientId ??
         getBrowserViewsForDevice(device)[0]?.clientId ??
@@ -293,8 +311,22 @@ export const createBrowserMode = ({
       deviceId,
       message: {
         type: "settings",
-        settings: stateStore.getSettings(deviceId),
+        settings: settingsWithClock(deviceId),
       },
+    })
+  }
+
+  // The global clock knobs live on the server-wide device (one set of topics,
+  // not per browser device). When any changes, re-push settings to EVERY
+  // browser device so their clocks reformat live — matching the e-ink re-push.
+  const globalClockStateTopics = new Set([
+    globalTopics.clockTimezoneState,
+    globalTopics.clockTimeFormatState,
+    globalTopics.clockDateStyleState,
+  ])
+  const broadcastSettingsToAll = () => {
+    devices.forEach((device) => {
+      broadcastSettings(device.id)
     })
   }
 
@@ -305,6 +337,10 @@ export const createBrowserMode = ({
     topic: string
     payload: string
   }) => {
+    if (globalClockStateTopics.has(topic)) {
+      broadcastSettingsToAll()
+      return
+    }
     const route = routes.get(topic)
     if (!route) {
       return
@@ -535,7 +571,7 @@ export const createBrowserMode = ({
     )
 
     await publisher.subscribe({
-      topics: Array.from(routes.keys()),
+      topics: [...routes.keys(), ...globalClockStateTopics],
       handler: handleMessage,
     })
 
