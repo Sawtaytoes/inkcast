@@ -52,3 +52,7 @@ test-results/
 .claude/scheduled_tasks.lock
 
 *.log
+
+# Python bytecode
+__pycache__/
+*.pyc

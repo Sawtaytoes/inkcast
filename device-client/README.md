@@ -52,8 +52,8 @@ ssh pi@<host> 'sudo mv /tmp/inkcast-receiver.service /etc/systemd/system/inkcast
 ssh pi@<host> 'sudo install -d -m 755 /etc/systemd/system/inkcast-receiver.service.d && \
   printf "%s\n" \
     "[Service]" \
-    "Environment=MQTT_HOST=<broker-host>" \
-    "Environment=MQTT_PORT=1883" \
+    "Environment=MQTT_HOST=<ha-host>" \
+    "Environment=MQTT_PORT=8883" \
     "Environment=MQTT_USERNAME=<mqtt-username>" \
     "Environment=MQTT_PASSWORD=<mqtt-password>" \
     "Environment=INKCAST_IMAGE_TOPIC=inkcast/inky-phat/image" \
@@ -78,7 +78,9 @@ Set these in the drop-in (`.../inkcast-receiver.service.d/mqtt.conf`).
 | Variable | Required | Default | Meaning |
 | --- | --- | --- | --- |
 | `MQTT_HOST` | yes* | — | Broker hostname/IP. |
-| `MQTT_PORT` | no | `1883` | Broker port (plain MQTT). |
+| `MQTT_PORT` | no | `1883` | Broker port. `8883` = TLS (auto-enables `tls_set`). |
+| `MQTT_TLS` | no | auto | Force TLS on/off; default auto (on when port `8883`). Broker's Let's Encrypt cert verifies against the system trust store. |
+| `MQTT_CA_FILE` | no | — | CA bundle path; only for a private CA (LE needs none). |
 | `MQTT_USERNAME` | no | — | Broker username. |
 | `MQTT_PASSWORD` | no | — | Broker password. |
 | `MQTT_URL` | no | — | Alternative to `MQTT_HOST`/`MQTT_PORT`: `mqtt://host:port`. |

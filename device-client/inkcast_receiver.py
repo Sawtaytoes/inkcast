@@ -28,10 +28,16 @@ Design notes (Pi Zero W / ARMv6 / 512 MB):
 
 Environment / config (all optional except the broker host):
   MQTT_HOST             broker hostname/IP (required; e.g. <ha-host>)
-  MQTT_PORT             broker port (default 1883, plain MQTT)
+  MQTT_PORT             broker port (default 1883 plain; 8883 = TLS)
   MQTT_USERNAME         broker username
   MQTT_PASSWORD         broker password
-  MQTT_URL              alternative to MQTT_HOST/PORT: mqtt://host:port (parsed)
+  MQTT_URL              alternative to MQTT_HOST/PORT: mqtt(s)://host:port (parsed)
+  MQTT_TLS              force TLS on/off ("1"/"true"/"0"/"false"); default: auto
+                        (TLS when port is 8883 or MQTT_URL scheme is mqtts).
+                        The broker presents a publicly-trusted (Let's Encrypt)
+                        cert, so no CA file is needed — the system trust store
+                        verifies it. Set MQTT_CA_FILE only for a private CA.
+  MQTT_CA_FILE          optional CA bundle path (default: system trust store)
   INKCAST_IMAGE_TOPIC   image topic to subscribe (default inkcast/inky-phat/image)
   INKCAST_AVAIL_TOPIC   availability topic to publish online/offline
                         (default <image-topic-prefix>/receiver/availability)
@@ -82,11 +88,25 @@ def read_broker_config():
     username = os.environ.get("MQTT_USERNAME", "").strip() or None
     password = os.environ.get("MQTT_PASSWORD", "").strip() or None
 
+    # TLS: explicit MQTT_TLS wins; otherwise auto-detect from port 8883 or an
+    # mqtts:// URL scheme. The broker uses a publicly-trusted (Let's Encrypt)
+    # cert, so the default (no CA file) verifies against the system trust store.
+    tls_override = os.environ.get("MQTT_TLS", "").strip().lower()
+    if tls_override in ("1", "true", "yes", "on"):
+        use_tls = True
+    elif tls_override in ("0", "false", "no", "off"):
+        use_tls = False
+    else:
+        use_tls = port == 8883 or (parsed_url.scheme == "mqtts" if parsed_url else False)
+    ca_file = os.environ.get("MQTT_CA_FILE", "").strip() or None
+
     return {
         "host": host,
         "port": port,
         "username": username,
         "password": password,
+        "tls": use_tls,
+        "ca_file": ca_file,
     }
 
 
@@ -194,6 +214,16 @@ def main():
     )
     if broker["username"]:
         client.username_pw_set(broker["username"], broker["password"])
+
+    # Enable TLS before connect when targeting the encrypted listener (8883).
+    # No args → verify the broker cert against the OS trust store (works for the
+    # publicly-trusted Let's Encrypt cert); MQTT_CA_FILE overrides for a private CA.
+    if broker["tls"]:
+        client.tls_set(ca_certs=broker["ca_file"])
+        print(
+            f"[mqtt] TLS enabled (ca={'system' if not broker['ca_file'] else broker['ca_file']})",
+            flush=True,
+        )
 
     # Last Will: if we drop off ungracefully, the broker marks us offline.
     client.will_set(availability_topic, "offline", qos=1, retain=True)
