@@ -1,4 +1,4 @@
-import { nowMs, weather } from "../state.ts"
+import { clockConfig, nowMs, weather } from "../state.ts"
 import {
   formatClockDate,
   formatClockTime,
@@ -30,10 +30,10 @@ export const Weather = () => {
       )}
       <div class="weather-clock">
         <span class="weather-time">
-          {formatClockTime(nowMs.value)}
+          {formatClockTime(nowMs.value, clockConfig.value)}
         </span>
         <span class="weather-date">
-          {formatClockDate(nowMs.value)}
+          {formatClockDate(nowMs.value, clockConfig.value)}
         </span>
       </div>
     </div>

@@ -66,6 +66,15 @@ export const agenda = signal<AgendaData | null>(
 )
 export const isConnected = signal(false)
 
+/**
+ * The server-stamped global clock config (timezone / 12-24h / date style) the
+ * clock-bearing views format against. Undefined until the first settings
+ * payload — the time helpers apply their own device-local default.
+ */
+export const clockConfig = computed(
+  () => settings.value.clock,
+)
+
 /** Ticks each second so the seek bar and ambient clock advance between pushes. */
 export const nowMs = signal(Date.now())
 setInterval(() => {

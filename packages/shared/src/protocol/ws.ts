@@ -20,6 +20,19 @@ import type { DeviceCommand } from "./commands.ts"
  */
 export const DEFAULT_PHOTO_INTERVAL_MINUTES = 10
 
+/**
+ * Resolved global clock settings the browser views format against, so browser
+ * screens honour the same Home Assistant Clock:* knobs as the e-ink devices
+ * (timezone via `Intl`, 12/24-hour, long/numeric date). The server stamps this
+ * onto every settings payload; `timeZone` absent = the device's local zone.
+ */
+export type BrowserClockConfig = {
+  /** IANA timezone (e.g. "America/Chicago"); absent = device-local. */
+  timeZone?: string
+  isTwelveHour: boolean
+  isNumericDate: boolean
+}
+
 /** Dynamic per-device settings the browser applies live (no reload). */
 export type BrowserDeviceSettings = {
   /** Clockwise degrees the client applies as a CSS transform. */
@@ -27,6 +40,11 @@ export type BrowserDeviceSettings = {
   theme: "Auto" | "Dark" | "Light"
   /** Photo Frame rotation interval, minutes — the SPA rotates client-side. */
   photoIntervalMinutes: number
+  /**
+   * Server-stamped global clock config. Optional on the wire so an older
+   * payload stays valid; the client falls back to a device-local default.
+   */
+  clock?: BrowserClockConfig
 }
 
 /** Static capabilities inlined into the page shell and the snapshot. */

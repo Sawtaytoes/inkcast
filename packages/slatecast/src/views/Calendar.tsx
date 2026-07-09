@@ -1,4 +1,4 @@
-import { agenda, nowMs } from "../state.ts"
+import { agenda, clockConfig, nowMs } from "../state.ts"
 import {
   formatClockDate,
   formatClockTime,
@@ -35,10 +35,16 @@ export const Calendar = () => {
     <div class="calendar">
       <div class="calendar-header">
         <span class="calendar-time">
-          {formatClockTime(currentMillis)}
+          {formatClockTime(
+            currentMillis,
+            clockConfig.value,
+          )}
         </span>
         <span class="calendar-date">
-          {formatClockDate(currentMillis)}
+          {formatClockDate(
+            currentMillis,
+            clockConfig.value,
+          )}
         </span>
       </div>
       {upcomingEvents.length > 0 ? (
@@ -52,6 +58,7 @@ export const Calendar = () => {
                 {formatEventTime({
                   startMillis: event.startMs,
                   isAllDay: event.isAllDay,
+                  clock: clockConfig.value,
                 })}
               </span>
               <span class="calendar-event-summary">
