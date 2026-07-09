@@ -33,6 +33,21 @@ export const BROWSER_VIEWS: readonly BrowserViewDefinition[] =
       clientId: "ambient",
       isTouchRequired: false,
     },
+    {
+      name: "Clock",
+      clientId: "clock",
+      isTouchRequired: false,
+    },
+    {
+      name: "Weather",
+      clientId: "weather",
+      isTouchRequired: false,
+    },
+    {
+      name: "Calendar",
+      clientId: "calendar",
+      isTouchRequired: false,
+    },
   ]
 
 export const DEFAULT_BROWSER_VIEW = BROWSER_VIEWS[0]!
