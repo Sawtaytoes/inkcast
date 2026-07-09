@@ -48,12 +48,26 @@ def main():
     if not host:
         raise RuntimeError("no broker host: set MQTT_HOST in the drop-in")
 
+    # TLS: explicit MQTT_TLS wins, else auto-detect from port 8883. The broker's
+    # Let's Encrypt cert verifies against the system trust store (no CA file).
+    tls_override = env("MQTT_TLS", "").lower()
+    if tls_override in ("1", "true", "yes", "on"):
+        use_tls = True
+    elif tls_override in ("0", "false", "no", "off"):
+        use_tls = False
+    else:
+        use_tls = port == 8883
+    ca_file = env("MQTT_CA_FILE")
+
     client = mqtt.Client(
         mqtt.CallbackAPIVersion.VERSION2,
         client_id=f"inkcast-buttons-{device_id}",
     )
     if username:
         client.username_pw_set(username, password)
+    if use_tls:
+        client.tls_set(ca_certs=ca_file)
+        print(f"[buttons] TLS enabled (ca={'system' if not ca_file else ca_file})", flush=True)
     client.connect_async(host, port)
     client.loop_start()
 
