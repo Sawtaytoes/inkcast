@@ -1,3 +1,4 @@
+import type { ComponentType } from "preact"
 import { render } from "preact"
 import {
   activeView,
@@ -6,9 +7,26 @@ import {
   settings,
 } from "./state.ts"
 import { Ambient } from "./views/Ambient.tsx"
+import { Calendar } from "./views/Calendar.tsx"
+import { Clock } from "./views/Clock.tsx"
 import { NowPlaying } from "./views/NowPlaying.tsx"
 import { Queue } from "./views/Queue.tsx"
+import { Weather } from "./views/Weather.tsx"
 import "./styles.css"
+
+/**
+ * Maps a view's `clientId` (from the server's browser view registry, delivered
+ * over the WebSocket `view` message) to its component. An unknown id falls back
+ * to Now Playing.
+ */
+const viewByClientId: Record<string, ComponentType> = {
+  "now-playing": NowPlaying,
+  queue: Queue,
+  ambient: Ambient,
+  clock: Clock,
+  weather: Weather,
+  calendar: Calendar,
+}
 
 /**
  * Root: applies the dynamic settings (rotation as a CSS transform so an HA
@@ -30,6 +48,9 @@ const App = () => {
     )
   }
 
+  const ActiveView =
+    viewByClientId[activeView.value] ?? NowPlaying
+
   return (
     <div
       class={`stage shape-${profile.shape}${profile.hasTouch ? "" : " touchless"}`}
@@ -43,13 +64,7 @@ const App = () => {
         height: isSideways ? "100vw" : "100vh",
       }}
     >
-      {activeView.value === "queue" ? (
-        <Queue />
-      ) : activeView.value === "ambient" ? (
-        <Ambient />
-      ) : (
-        <NowPlaying />
-      )}
+      <ActiveView />
     </div>
   )
 }

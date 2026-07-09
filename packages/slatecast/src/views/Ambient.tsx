@@ -1,4 +1,8 @@
 import { nowMs, weather } from "../state.ts"
+import {
+  formatClockDate,
+  formatClockTime,
+} from "../time.ts"
 
 /**
  * Ambient view: a big clock with today's date, plus the current weather
@@ -8,22 +12,16 @@ import { nowMs, weather } from "../state.ts"
  * MQTT, so it survives reconnects and appears the moment HA publishes.
  */
 export const Ambient = () => {
-  const date = new Date(nowMs.value)
-  const timeText = date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  })
-  const dateText = date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  })
   const data = weather.value
 
   return (
     <div class="ambient">
-      <div class="ambient-time">{timeText}</div>
-      <div class="ambient-date">{dateText}</div>
+      <div class="ambient-time">
+        {formatClockTime(nowMs.value)}
+      </div>
+      <div class="ambient-date">
+        {formatClockDate(nowMs.value)}
+      </div>
       {data ? (
         <div class="ambient-weather">
           <span class="ambient-temp">

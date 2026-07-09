@@ -6,6 +6,7 @@ import type {
   ServerToClientMessage,
 } from "@castkit/shared/protocol/ws"
 import type {
+  AgendaData,
   NowPlayingData,
   QueueData,
   WeatherData,
@@ -58,6 +59,9 @@ export const queue = signal<QueueData | null>(
 export const weather = signal<WeatherData | null>(
   inlineSnapshot?.data.weather ?? null,
 )
+export const agenda = signal<AgendaData | null>(
+  inlineSnapshot?.data.agenda ?? null,
+)
 export const isConnected = signal(false)
 
 /** Ticks each second so the seek bar and ambient clock advance between pushes. */
@@ -95,6 +99,7 @@ const applyMessage = (message: ServerToClientMessage) => {
     nowPlaying.value = message.data.nowPlaying ?? null
     queue.value = message.data.queue ?? null
     weather.value = message.data.weather ?? null
+    agenda.value = message.data.agenda ?? null
     return
   }
   if (message.type === "view") {
@@ -117,10 +122,13 @@ const applyMessage = (message: ServerToClientMessage) => {
     weather.value = message.data
     return
   }
+  if (message.type === "agenda") {
+    agenda.value = message.data
+    return
+  }
   if (message.type === "reload") {
     window.location.reload()
   }
-  // agenda arrives with its ambient view (later milestone).
 }
 
 let socket: WebSocket | null = null

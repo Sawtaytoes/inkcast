@@ -92,6 +92,9 @@ describe("buildBrowserDiscoveryMessages", () => {
       "Now Playing",
       "Queue",
       "Ambient",
+      "Clock",
+      "Weather",
+      "Calendar",
     ])
   })
 })
