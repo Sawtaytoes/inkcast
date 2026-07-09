@@ -43,6 +43,14 @@ export const buildBrowserDeviceTopics = ({
     themeState: `${base}/theme`,
     rotationCommand: `${base}/rotation/set`,
     rotationState: `${base}/rotation`,
+    // Photo Frame source (Immich people/query) + rotation interval. People &
+    // query steer the `/d/<id>/photo` endpoint; the interval rides settings.
+    photoPeopleCommand: `${base}/photo_people/set`,
+    photoPeopleState: `${base}/photo_people`,
+    photoQueryCommand: `${base}/photo_query/set`,
+    photoQueryState: `${base}/photo_query`,
+    photoIntervalCommand: `${base}/photo_interval/set`,
+    photoIntervalState: `${base}/photo_interval`,
     // Panel backlight (gpio-backlight, on/off only on the HyperPixels) —
     // handled by a tiny MQTT agent ON THE KIOSK PI (castkit-backlight
     // service), not by the server or the SPA: a browser can't reach sysfs.
@@ -204,6 +212,56 @@ export const buildBrowserDiscoveryMessages = ({
         options: Array.from(ROTATION_OPTIONS),
         command_topic: topics.rotationCommand,
         state_topic: topics.rotationState,
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
+      // Photo Frame: Immich people whose photos to show (comma-separated
+      // names, resolved against Immich). Steers the `/d/<id>/photo` endpoint.
+      topic: discoveryTopic("text", "photo_people"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Photo Frame: People",
+        unique_id: `castkit_${device.id}_photo_people`,
+        command_topic: topics.photoPeopleCommand,
+        state_topic: topics.photoPeopleState,
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
+      // Photo Frame: Immich smart-search query (combined with People — either
+      // or both). Empty People AND Query = the view shows a placeholder.
+      topic: discoveryTopic("text", "photo_query"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Photo Frame: Query",
+        unique_id: `castkit_${device.id}_photo_query`,
+        command_topic: topics.photoQueryCommand,
+        state_topic: topics.photoQueryState,
+        entity_category: "config",
+        device: deviceBlock,
+      },
+    },
+    {
+      // Photo Frame: rotation interval in minutes. The SPA rotates client-side
+      // off this (delivered via the settings push), no server timer needed.
+      topic: discoveryTopic("number", "photo_interval"),
+      isRetained: true,
+      payload: {
+        ...availability,
+        name: "Photo Frame: Rotation minutes",
+        unique_id: `castkit_${device.id}_photo_interval`,
+        command_topic: topics.photoIntervalCommand,
+        state_topic: topics.photoIntervalState,
+        min: 1,
+        max: 1_440,
+        step: 1,
+        unit_of_measurement: "min",
+        mode: "box",
         entity_category: "config",
         device: deviceBlock,
       },

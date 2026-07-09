@@ -1,4 +1,7 @@
-import type { BrowserDeviceSettings } from "@castkit/shared/protocol/ws"
+import {
+  type BrowserDeviceSettings,
+  DEFAULT_PHOTO_INTERVAL_MINUTES,
+} from "@castkit/shared/protocol/ws"
 import type { BrowserDeviceConfig } from "../config/env.ts"
 import {
   DEFAULT_BROWSER_VIEW,
@@ -65,6 +68,8 @@ export const createBrowserStateStore = ({
       settingsByDeviceId.get(deviceId) ?? {
         orientation: 0,
         theme: "Auto",
+        photoIntervalMinutes:
+          DEFAULT_PHOTO_INTERVAL_MINUTES,
       },
     setSettings: ({
       deviceId,
@@ -76,6 +81,8 @@ export const createBrowserStateStore = ({
       const current = settingsByDeviceId.get(deviceId) ?? {
         orientation: 0 as const,
         theme: "Auto" as const,
+        photoIntervalMinutes:
+          DEFAULT_PHOTO_INTERVAL_MINUTES,
       }
       const next = { ...current, ...settings }
       settingsByDeviceId.set(deviceId, next)

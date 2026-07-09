@@ -48,6 +48,11 @@ export const BROWSER_VIEWS: readonly BrowserViewDefinition[] =
       clientId: "calendar",
       isTouchRequired: false,
     },
+    {
+      name: "Photo Frame",
+      clientId: "photo-frame",
+      isTouchRequired: false,
+    },
   ]
 
 export const DEFAULT_BROWSER_VIEW = BROWSER_VIEWS[0]!

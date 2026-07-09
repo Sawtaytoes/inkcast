@@ -10,6 +10,7 @@ import { Ambient } from "./views/Ambient.tsx"
 import { Calendar } from "./views/Calendar.tsx"
 import { Clock } from "./views/Clock.tsx"
 import { NowPlaying } from "./views/NowPlaying.tsx"
+import { PhotoFrame } from "./views/PhotoFrame.tsx"
 import { Queue } from "./views/Queue.tsx"
 import { Weather } from "./views/Weather.tsx"
 import "./styles.css"
@@ -26,6 +27,7 @@ const viewByClientId: Record<string, ComponentType> = {
   clock: Clock,
   weather: Weather,
   calendar: Calendar,
+  "photo-frame": PhotoFrame,
 }
 
 /**

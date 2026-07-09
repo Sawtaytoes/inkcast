@@ -20,11 +20,19 @@ import {
   buildBrowserDiscoveryMessages,
   THEME_OPTIONS,
 } from "../homeAssistant/browserDiscovery.ts"
+import {
+  fetchFaceBoxes,
+  fetchPreviewJpeg,
+  pickRandomAssetId,
+  resolvePersonIds,
+} from "../immich/immichClient.ts"
+import { preparePhotoFrameImage } from "../immich/photoFrameImage.ts"
 import { createViewDataStore } from "../state/viewDataStore.ts"
 import {
   getBrowserViewByName,
   getBrowserViewsForDevice,
 } from "../views/browserRegistry.ts"
+import { createBrowserPhotoConfigStore } from "./browserPhotoConfigStore.ts"
 import { createBrowserStateStore } from "./browserStateStore.ts"
 import { createBrowserHub, type HubSocket } from "./hub.ts"
 import {
@@ -56,6 +64,17 @@ const parseRotationPayload = (
 const parseThemePayload = (payload: string) =>
   THEME_OPTIONS.find((option) => option === payload) ?? null
 
+/** Recency half-life for the browser photo pool (matches the image default). */
+const PHOTO_RECENCY_HALF_LIFE_DAYS = 365
+
+/** A positive whole-minute interval, or null when the payload is unusable. */
+const parsePhotoIntervalPayload = (
+  payload: string,
+): number | null => {
+  const value = Number.parseInt(payload, 10)
+  return Number.isFinite(value) && value >= 1 ? value : null
+}
+
 const parseJsonPayload = (payload: string): unknown => {
   try {
     return JSON.parse(payload)
@@ -79,10 +98,18 @@ export const createBrowserMode = ({
   const { baseTopic } = config.mqtt
   const stateStore = createBrowserStateStore({ devices })
   const viewDataStore = createViewDataStore()
+  const photoConfigStore = createBrowserPhotoConfigStore()
+  const immichConfig = config.immich
+  const isPhotoFrameEnabled = Boolean(
+    immichConfig.url && immichConfig.apiKey,
+  )
   // Which per-device knobs were set THIS run (blocks boot-time restore).
   const knobSetByDeviceId = {
     theme: new Set<string>(),
     rotation: new Set<string>(),
+    photoPeople: new Set<string>(),
+    photoQuery: new Set<string>(),
+    photoInterval: new Set<string>(),
   }
 
   const topicsByDeviceId = new Map(
@@ -217,6 +244,12 @@ export const createBrowserMode = ({
     | "themeRestore"
     | "rotation"
     | "rotationRestore"
+    | "photoPeople"
+    | "photoPeopleRestore"
+    | "photoQuery"
+    | "photoQueryRestore"
+    | "photoInterval"
+    | "photoIntervalRestore"
     | "nowPlayingData"
     | "queueData"
     | "weatherData"
@@ -239,6 +272,12 @@ export const createBrowserMode = ({
       [topics.themeState, "themeRestore"],
       [topics.rotationCommand, "rotation"],
       [topics.rotationState, "rotationRestore"],
+      [topics.photoPeopleCommand, "photoPeople"],
+      [topics.photoPeopleState, "photoPeopleRestore"],
+      [topics.photoQueryCommand, "photoQuery"],
+      [topics.photoQueryState, "photoQueryRestore"],
+      [topics.photoIntervalCommand, "photoInterval"],
+      [topics.photoIntervalState, "photoIntervalRestore"],
       [topics.nowPlayingDataCommand, "nowPlayingData"],
       [topics.queueDataCommand, "queueData"],
       [topics.weatherDataCommand, "weatherData"],
@@ -337,6 +376,84 @@ export const createBrowserMode = ({
         await publisher.publish({
           topic: topics.rotationState,
           payload: String(rotation),
+          isRetained: true,
+        })
+      }
+      broadcastSettings(deviceId)
+      return
+    }
+    if (
+      kind === "photoPeople" ||
+      kind === "photoPeopleRestore"
+    ) {
+      if (
+        kind === "photoPeopleRestore" &&
+        knobSetByDeviceId.photoPeople.has(deviceId)
+      ) {
+        return
+      }
+      knobSetByDeviceId.photoPeople.add(deviceId)
+      photoConfigStore.setPhotoPeople({
+        deviceId,
+        peopleText: payload,
+      })
+      if (kind === "photoPeople") {
+        await publisher.publish({
+          topic: topics.photoPeopleState,
+          payload,
+          isRetained: true,
+        })
+      }
+      return
+    }
+    if (
+      kind === "photoQuery" ||
+      kind === "photoQueryRestore"
+    ) {
+      if (
+        kind === "photoQueryRestore" &&
+        knobSetByDeviceId.photoQuery.has(deviceId)
+      ) {
+        return
+      }
+      knobSetByDeviceId.photoQuery.add(deviceId)
+      photoConfigStore.setPhotoQuery({
+        deviceId,
+        queryText: payload,
+      })
+      if (kind === "photoQuery") {
+        await publisher.publish({
+          topic: topics.photoQueryState,
+          payload,
+          isRetained: true,
+        })
+      }
+      return
+    }
+    if (
+      kind === "photoInterval" ||
+      kind === "photoIntervalRestore"
+    ) {
+      const intervalMinutes =
+        parsePhotoIntervalPayload(payload)
+      if (intervalMinutes === null) {
+        return
+      }
+      if (
+        kind === "photoIntervalRestore" &&
+        knobSetByDeviceId.photoInterval.has(deviceId)
+      ) {
+        return
+      }
+      knobSetByDeviceId.photoInterval.add(deviceId)
+      stateStore.setSettings({
+        deviceId,
+        settings: { photoIntervalMinutes: intervalMinutes },
+      })
+      if (kind === "photoInterval") {
+        await publisher.publish({
+          topic: topics.photoIntervalState,
+          payload: String(intervalMinutes),
           isRetained: true,
         })
       }
@@ -530,6 +647,79 @@ export const createBrowserMode = ({
         )
       }
       return context.html(buildDevicePageHtml({ snapshot }))
+    })
+
+    // A fresh, face-cropped Immich photo sized to this browser panel. The SPA
+    // Photo Frame view points an <img> here and re-requests on its rotation
+    // interval; each call returns a new recency-weighted random photo. A 204
+    // (Immich off, or no People/Query set) tells the SPA to show a placeholder.
+    app.get("/d/:id/photo", async (context) => {
+      const deviceId = context.req.param("id") ?? ""
+      const device = stateStore.deviceById.get(deviceId)
+      if (!device) {
+        return context.body(null, 404)
+      }
+      if (!isPhotoFrameEnabled) {
+        return context.body(null, 204)
+      }
+      const peopleText =
+        photoConfigStore.getPhotoPeople(deviceId)
+      const queryText = photoConfigStore
+        .getPhotoQuery(deviceId)
+        .trim()
+      if (!peopleText && !queryText) {
+        return context.body(null, 204)
+      }
+
+      try {
+        const { personIds } = peopleText
+          ? await resolvePersonIds({
+              config: immichConfig,
+              peopleText,
+            })
+          : { personIds: [] as string[] }
+        if (personIds.length === 0 && !queryText) {
+          return context.body(null, 204)
+        }
+
+        const assetId = await pickRandomAssetId({
+          config: immichConfig,
+          personIds,
+          query: queryText || undefined,
+          recencyHalfLifeDays: PHOTO_RECENCY_HALF_LIFE_DAYS,
+        })
+        if (!assetId) {
+          return context.body(null, 204)
+        }
+
+        const [jpegBytes, faceBoxes] = await Promise.all([
+          fetchPreviewJpeg({
+            config: immichConfig,
+            assetId,
+          }),
+          fetchFaceBoxes({
+            config: immichConfig,
+            assetId,
+            personIds,
+          }),
+        ])
+        const { png } = await preparePhotoFrameImage({
+          jpegBytes,
+          targetWidth: device.width,
+          targetHeight: device.height,
+          faceBoxes,
+        })
+        return context.body(new Uint8Array(png), 200, {
+          "Content-Type": "image/png",
+          "Cache-Control": "no-store",
+        })
+      } catch (error) {
+        console.error(
+          `[castkit] browser photo ${deviceId}: fetch failed`,
+          error,
+        )
+        return context.body(null, 502)
+      }
     })
 
     app.get(

@@ -1,9 +1,10 @@
 import type { DeviceCommand } from "@castkit/shared/protocol/commands"
-import type {
-  BrowserDeviceProfile,
-  BrowserDeviceSettings,
-  ClientToServerMessage,
-  ServerToClientMessage,
+import {
+  type BrowserDeviceProfile,
+  type BrowserDeviceSettings,
+  type ClientToServerMessage,
+  DEFAULT_PHOTO_INTERVAL_MINUTES,
+  type ServerToClientMessage,
 } from "@castkit/shared/protocol/ws"
 import type {
   AgendaData,
@@ -45,6 +46,7 @@ export const settings = signal<BrowserDeviceSettings>(
   inlineSnapshot?.settings ?? {
     orientation: 0,
     theme: "Auto",
+    photoIntervalMinutes: DEFAULT_PHOTO_INTERVAL_MINUTES,
   },
 )
 export const activeView = signal<string>(
