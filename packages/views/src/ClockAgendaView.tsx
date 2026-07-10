@@ -118,13 +118,33 @@ export const ClockAgendaView = ({
   )
   const compactEventSummaryFontSize = readableFloor
 
+  // Pin the time to the top once a compact panel is carrying events: the agenda
+  // stack can be taller than the short pHAT, and a centred column overflows
+  // *both* edges — clipping the time (the anchor) off the top. Anchoring to the
+  // top keeps the time fully on-panel and lets any overflow fall off the bottom
+  // (the last, least-imminent event) instead. With no events the view still
+  // centres, so it reads identically to ClockWeatherView on a free day.
+  const pinToTop = isCompactPanel && hasEvents
   const rootStyle: CSSProperties = {
     ...buildPanelRootStyle({ width, height }),
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: pinToTop ? "flex-start" : "center",
+    paddingTop: pinToTop ? Math.round(height * 0.04) : 0,
     paddingLeft: horizontalPadding,
     paddingRight: horizontalPadding,
   }
+
+  // Event summaries never wrap (one row each), so a long title would otherwise
+  // run off the right edge. Cap each summary to the row's remaining width and
+  // ellipsis-truncate — both render engines honour this with nowrap + hidden.
+  const compactSummaryMaxWidth =
+    availableWidth -
+    Math.round(width * 0.2) -
+    Math.round(width * 0.02)
+  const largeSummaryMaxWidth =
+    availableWidth -
+    Math.round(width * 0.16) -
+    Math.round(width * 0.02)
 
   const timeStyle: CSSProperties = {
     display: "flex",
@@ -242,6 +262,9 @@ export const ClockAgendaView = ({
     fontWeight: 700,
     lineHeight: 1.1,
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: compactSummaryMaxWidth,
     marginLeft: Math.round(width * 0.02),
   }
 
@@ -285,6 +308,9 @@ export const ClockAgendaView = ({
     fontWeight: 700,
     lineHeight: 1.1,
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: largeSummaryMaxWidth,
     marginLeft: Math.round(width * 0.02),
   }
 
