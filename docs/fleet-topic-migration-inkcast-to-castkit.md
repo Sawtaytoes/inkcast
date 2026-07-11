@@ -96,6 +96,13 @@ NOT change (deliberate, so HA never recreates entities). Consequences:
    `IMMICH_URL` + `IMMICH_API_TOKEN` (copy from the inkcast app), set
    `INKCAST_RENDER_ENGINE=chromium` (the image bundles Playwright Chromium),
    and mount `App-Configs/inkcast` read-only if the merged file references it.
+   **⚠️ ALSO raise the app's resource limits to match the retired inkcast app —
+   `resources.limits.cpus=16`, `resources.limits.memory=16384` (16 GB).** The
+   castkit app shipped at 4 GB / 4 CPUs (fine for two tiny browser kiosks); at 4
+   GB, Chromium OOM-kills on the 13.3" Photo Frame renders (2400×3200
+   supersampled) and the crash cascades to the whole fleet. This was **missed on
+   the first run** and caused a same-day regression — see
+   [`2026-07-11-castkit-eink-oom-and-view-state-handoff.md`](2026-07-11-castkit-eink-oom-and-view-state-handoff.md).
 4. **Stop the inkcast app** (`app.stop inkcast`) so two servers never race on
    the same broker. Do NOT delete it yet.
 5. **Clear the old retained discovery configs FIRST** (see "Entity identity"

@@ -1,9 +1,41 @@
 # Handoff: castkit e-ink Photo Frame OOM (13.3" panels) + post-migration view state
 
 **Date:** 2026-07-11
-**Status:** OPEN — root cause found, fix not yet applied (documenting per request).
+**Status:** ✅ RESOLVED 2026-07-11 (primary fix applied; see Resolution). One
+optional code-hardening follow-up remains open (browser auto-relaunch).
 **Follows:** [`fleet-topic-migration-inkcast-to-castkit.md`](fleet-topic-migration-inkcast-to-castkit.md)
 (the `inkcast`→`castkit` fleet migration that introduced this regression).
+
+## Resolution (2026-07-11)
+
+Bumped the `castkit` TrueNAS app back to the retired inkcast app's limits —
+**16 GB / 16 CPUs** — via `app.update` (`resources.limits.cpus=16`,
+`resources.limits.memory=16384`). The container recreated with
+`MemLimit=17179869184` (16 GB), `NanoCpus=16000000000`. Force-refreshed the two
+13.3" panels + the kitchen; all four now render cleanly:
+
+```
+push eink-6e6697 (Photo Frame, 40633 bytes)
+push eink-07769e (Photo Frame, 44203 bytes)
+push eink-4da1be (Photo Frame, 44203 bytes)
+push eink-a615f8 (Clock (Weather), 1193 bytes)
+```
+
+Peak memory during concurrent 13.3" renders ≈ 2.5 GiB / 16 GiB, **no new
+`chrome-headless` cgroup OOM**, `OOMKilled=false`. The `image.eink_07769e_*` /
+`eink-4da1be_*` timestamps advanced (were frozen at 17:33). Also re-set the
+**kitchen (`eink-6e6697`) view to Photo Frame** — it had been stranded on "Now
+Playing (Poster)" because its revert-to-idle trigger was missed during the
+migration's discovery churn (both Shield players were idle).
+
+**Still open (optional, low priority):** the secondary code hardening below —
+make the Chromium engine relaunch a dead/OOM-killed browser instead of stranding
+the fleet until a container restart. With 16 GB headroom this is now defence in
+depth, not urgent.
+
+---
+
+## Original investigation (kept for the record)
 
 ## Symptom (as reported)
 
