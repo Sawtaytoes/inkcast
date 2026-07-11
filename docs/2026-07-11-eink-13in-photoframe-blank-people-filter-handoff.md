@@ -1,8 +1,8 @@
 # Handoff: 13.3" e-ink Photo Frames are blank (empty `photo_people` filter)
 
 **Date:** 2026-07-11
-**Status:** ✅ RESOLVED 2026-07-11 — people filters restored (see Resolution).
-Optional follow-up (self-heal automation) still open.
+**Status:** ✅ RESOLVED 2026-07-11 — people filters restored + self-heal
+automation added (recurrence guard). Fully closed.
 
 ## Resolution (2026-07-11)
 
@@ -17,8 +17,10 @@ photos (varying byte sizes + `photo frame <id>: asset <id>` log lines, not the
 
 (#1→Kevin+Ashlee's family, #2→Faye+Moe's family. If the physical frames are
 swapped, swap the two lists.) Values are retained so they persist across
-restarts. **Still recommended:** a self-heal automation (see "Prevent
-recurrence") so a future retained-topic wipe can't blank them again.
+restarts. **Recurrence guard DONE:** `automation.self_heal_13_3_photo_frame_people`
+re-asserts each frame's list if its `Photo Frame: People` text entity blanks
+(`to: unknown` for 15 s) or on HA start — the same pattern the kitchen frame uses.
+So a future retained-topic wipe now self-heals both 13.3" frames too.
 
 ---
 
