@@ -1,10 +1,26 @@
-# Fleet topic migration: `inkcast/…` → `castkit/…` (P6 — GATE SATISFIED, ready to run)
+# Fleet topic migration: `inkcast/…` → `castkit/…` (P6 — ✅ DONE 2026-07-11)
 
-**Status:** NOT RUN. The original gate — **every e-ink device back online after
-the 2026-07-07 physical relocation** — was **confirmed by the maintainer the
-morning of 2026-07-07** ("All Pis are connected"). Still **re-verify at
-execution time** (step 1): an offline device can't pick up its new retained
-image topic and will wake to a stale/blank panel.
+**Status:** ✅ **COMPLETE (2026-07-11).** Ran top-to-bottom. All 4 e-ink
+receivers (`eink-a615f8`, `eink-6e6697`, `eink-07769e`, `eink-4da1be`) were
+verified online at execution, then repointed to `castkit/<id>/image` via a
+`zz-castkit-topic.conf` systemd drop-in on each Pi. castkit now serves the whole
+fleet (6 devices) on base topic `castkit`, engine `chromium`, with the Immich
+creds copied over. HA reclaimed every `select.eink_*` / `text.eink_*` / knob
+entity under its existing entity_id (0 ghosts; 0 devices left under manufacturer
+"Inkcast"); the shared server device now reads **"CastKit Server"**. The HA
+script `control_inkcast_eink_screen` publishes to `castkit/…` (all 3 topics).
+All retained `inkcast/#` and `homeassistant/+/inkcast/#` topics were cleared.
+The **inkcast TrueNAS app was deleted** (config + rendered compose backed up to
+`App-Configs/inkcast/inkcast-app-config.backup.json` +
+`inkcast-docker-compose.backup.yaml`) and **NPM host 46 (`inkcast.octen.dev`)
+removed**. Rollback is no longer one-command (the app is gone) but is
+reconstructable from those backups + the frozen `ghcr.io/sawtaytoes/inkcast`
+image on GHCR.
+
+> Historical gate (now moot): every e-ink device back online after the
+> 2026-07-07 relocation, confirmed by the maintainer that morning.
+
+The step-by-step runbook below is retained as the record of what was executed.
 
 ## Current state (updated 2026-07-07 morning)
 
