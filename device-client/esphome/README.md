@@ -33,24 +33,37 @@ See the decision records:
 
 ## How delivery works (the loop)
 
-1. HA decides this panel should show a view and triggers the CastKit server to
-   render it (same automation model as the Pi fleet).
-2. The server renders → dithers to the panel's 1-bit palette → keeps the PNG **in
-   memory only** under an unguessable single-use token, served at
-   `…/render/<token>.png` (evicted after the panel fetches it, or by a TTL).
-3. HA calls this panel's ESPHome action with that URL:
-   `esphome.m5paper_set_image(image_url: "http://storeman.octen:8788/render/<token>.png")`.
-4. The panel re-points `online_image` at the URL, fetches, blits, and the e-ink
-   holds the frame with zero power.
+This is the concrete contract the CastKit server ships (`packages/server/src/app.ts`):
+
+1. HA decides this panel should show a view and **mints a fresh render** by
+   calling the server, token-gated:
+
+   ```
+   POST /api/devices/m5paper/render      (Authorization: Bearer <INKCAST_API_TOKEN>)
+   → 200  { "token": "<hex>", "url": "<CASTKIT_PUBLIC_URL>/render/<token>.png" }
+   ```
+
+   The server renders → dithers to the panel's 1-bit palette → keeps the PNG **in
+   memory only** under that unguessable single-use token (evicted after the panel
+   fetches it, or by a TTL sweeper).
+2. HA passes the returned `url` to this panel's ESPHome action:
+   `esphome.m5paper_set_image(image_url: "<that url>")` — the action name
+   `set_image` is defined in `m5paper.yaml`.
+3. The panel re-points `online_image` at the URL, fetches
+   `GET /render/<token>.png` (public, single-use), blits, and the e-ink holds the
+   frame with zero power.
 
 The panel carries **no** CastKit URL and no house logic — HA passes the URL and
 owns all "which view / when / what a tap does" policy, consistent with
 view-switching-via-ha-automations.
 
-> **Prefer a plain-HTTP LAN token URL.** TLS on the ESP32 is RAM-hungry; the
-> render bytes are ephemeral and single-use, so serve them over `http://` on the
-> LAN. If you must use `https://`, set `verify_ssl: false` under `http_request:`
-> in `m5paper.yaml`.
+> **Mind the URL scheme — it comes from `CASTKIT_PUBLIC_URL`.** The server builds
+> `url` as `${CASTKIT_PUBLIC_URL}/render/<token>.png`, so whatever scheme that env
+> var uses is what the ESP32 must fetch. TLS on the ESP32 is RAM-hungry and the
+> render bytes are ephemeral + single-use, so the easiest path is to point
+> `CASTKIT_PUBLIC_URL` at the **plain-HTTP LAN** origin (e.g.
+> `http://storeman.octen:8788`). If it's `https://`, uncomment `verify_ssl: false`
+> under `http_request:` in `m5paper.yaml` (and expect higher RAM use).
 
 ## First-flash checklist
 
