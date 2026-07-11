@@ -74,11 +74,11 @@ api:
   actions:
     # HA calls this after the CastKit server mints a token URL for a fresh
     # render, e.g.:
-    #   esphome.m5paper_set_image(image_url: "http://storeman.octen:8788/render/<token>.png")
+    #   esphome.m5paper_set_image(image_url: "https://castkit.octen.dev/render/<token>.png")
     # The panel re-points online_image at that URL and fetches; the image's
-    # on_download_finished trigger then repaints the panel. A plain-HTTP LAN URL
-    # is recommended over HTTPS — TLS on the ESP32 is RAM-hungry, and the render
-    # bytes are ephemeral + single-use anyway.
+    # on_download_finished trigger then repaints the panel. CastKit lives at the
+    # LAN host https://castkit.octen.dev (internal cert) — so http_request needs
+    # verify_ssl: false below.
     - action: set_image
       variables:
         image_url: string
@@ -108,10 +108,12 @@ m5paper:
   battery_power_pin: GPIO5
   main_power_pin: GPIO2
 
-# HTTP client used by online_image to pull the render.
+# HTTP client used by online_image to pull the render. CastKit is served over
+# https at the LAN host castkit.octen.dev with an internal cert, so skip cert
+# verification on the ESP32.
 http_request:
   timeout: 10s
-  # verify_ssl: false   # uncomment only if HA hands out an https:// token URL
+  verify_ssl: false
 
 # The pushed render. CastKit dithers to 1-bit black/white, so BINARY (~65 KB for
 # 540x960) is exact for the mono panel. The URL here is a placeholder; HA
@@ -163,27 +165,30 @@ display:
       //   it.filled_rectangle(0, bar_y, filled, 8, COLOR_ON);
       // }
 
-# --- Touch & buttons (read by Home Assistant) -------------------------------
-# GT911 capacitive touch (MAINLINE component). Taps publish coordinates HA can
-# act on; add touch-zone binary_sensors later if you want fixed hit targets.
-# NOTE: if the build fails on gt911 / GPIO36 (input-only pin on some ESPHome
-# versions), comment this whole touchscreen block out — the display still works.
-touchscreen:
-  - platform: gt911
-    id: gt911_touchscreen
-    display: m5paper_display
-    interrupt_pin: GPIO36
-    on_touch:
-      - lambda: |-
-          char buffer[32];
-          sprintf(buffer, "(%d, %d)", touch.x, touch.y);
-          id(touch_coordinates).publish_state(buffer);
+# --- Touch (DISABLED for first flash) ---------------------------------------
+# GT911 capacitive touch is MAINLINE, but ESPHome regressed the GT911 reset to
+# drive the interrupt pin as an OUTPUT, which fails on the M5Paper's input-only
+# GPIO36 (esphome/esphome#14953, seen on 2026.3.0+). Left commented so the first
+# flash compiles cleanly; re-enable once the base panel is confirmed working
+# (and the GPIO36 handling is verified on your ESPHome version).
+#
+# touchscreen:
+#   - platform: gt911
+#     id: gt911_touchscreen
+#     display: m5paper_display
+#     interrupt_pin: GPIO36
+#     on_touch:
+#       - lambda: |-
+#           char buffer[32];
+#           sprintf(buffer, "(%d, %d)", touch.x, touch.y);
+#           id(touch_coordinates).publish_state(buffer);
+#
+# text_sensor:
+#   - platform: template
+#     name: "Touch Coordinates"
+#     id: touch_coordinates
 
-text_sensor:
-  - platform: template
-    name: "Touch Coordinates"
-    id: touch_coordinates
-
+# --- Buttons (read by Home Assistant) ---------------------------------------
 binary_sensor:
   # The three hardware buttons down the edge of the M5Paper (active-low).
   - platform: gpio

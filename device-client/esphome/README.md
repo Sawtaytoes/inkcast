@@ -57,13 +57,11 @@ The panel carries **no** CastKit URL and no house logic — HA passes the URL an
 owns all "which view / when / what a tap does" policy, consistent with
 view-switching-via-ha-automations.
 
-> **Mind the URL scheme — it comes from `CASTKIT_PUBLIC_URL`.** The server builds
-> `url` as `${CASTKIT_PUBLIC_URL}/render/<token>.png`, so whatever scheme that env
-> var uses is what the ESP32 must fetch. TLS on the ESP32 is RAM-hungry and the
-> render bytes are ephemeral + single-use, so the easiest path is to point
-> `CASTKIT_PUBLIC_URL` at the **plain-HTTP LAN** origin (e.g.
-> `http://storeman.octen:8788`). If it's `https://`, uncomment `verify_ssl: false`
-> under `http_request:` in `m5paper.yaml` (and expect higher RAM use).
+> **The token URL comes from `CASTKIT_PUBLIC_URL`.** The server builds `url` as
+> `${CASTKIT_PUBLIC_URL}/render/<token>.png`. Here that's the LAN host
+> `https://castkit.octen.dev` (internal cert), so the ESP32 fetches over https —
+> `m5paper.yaml` sets `http_request: verify_ssl: false` to skip cert
+> verification on-device.
 
 ## Components: what's mainline vs external
 
@@ -112,9 +110,13 @@ Then `esphome run m5paper.yaml`.
   (`0` / `90` / `180` / `270`) and re-flash — rotate on the *device*, never
   server-side, so the render stays 1:1 (the server's `rotation` knob is for a
   different job and would double up).
-- **If the build fails on `gt911` / `GPIO36`** (input-only pin on some ESPHome
-  versions), comment out the whole `touchscreen:` block — the display still works
-  and you can sort touch out after.
+- **Touch is disabled by default in this config.** ESPHome 2026.3.0+ regressed
+  the GT911 reset to drive the interrupt pin as an output, which fails on the
+  M5Paper's input-only GPIO36 (esphome/esphome#14953). The `touchscreen:` block
+  is left commented so the panel flashes cleanly; re-enable it once the base
+  works and the GPIO36 handling is confirmed on your ESPHome version.
+- **Validated on:** ESPHome 2026.6.5 — `esphome config m5paper.yaml` →
+  "Configuration is valid!" (display + image + buttons; touch commented).
 
 5. **Confirm geometry matches the CastKit device entry.** `m5paper.yaml` targets
    540×960 portrait to match the `m5paper` entry (width 540 × height 960) in the
