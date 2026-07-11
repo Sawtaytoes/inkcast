@@ -93,15 +93,17 @@ plus `api_encryption_key` in that app's `secrets.yaml`.
    the encryption key is the `api_encryption_key` secret. You'll get the button
    entities and the `set_image` action.
 
-> ⚠️ **Chip-mismatch after a re-create.** If Install shows
-> `Chip mismatch: ... device expects esp32c6`, the browser (ESPHome dashboard is a
-> PWA) cached the firmware from when the device was first created as an ESP32‑C6.
-> Ctrl+F5 does NOT clear the service-worker cache, and "Retry" re-flashes the same
-> cached blob. **Reliable fix: rename the node** (`esphome: name:` / `node_name`)
-> so every build + download URL changes — the cache can't shadow a new name. Then
-> Install the new card. (Confirm the server build is right first:
-> `docker exec ix-esphome-esphome-1 sh -c "grep board /config/.esphome/build/<node>/platformio.ini"`
-> → `m5stack-grey`.)
+> ⚠️ **`Chip mismatch: ... device expects esp32c6` — the Device Builder's board
+> record, NOT the YAML.** ESPHome's new Device Builder stores the chip/board in
+> the **device record** (set when the wizard created the device), separate from
+> the `esp32: board:` in the YAML text. If the device was first created as an
+> ESP32‑C6, the installer checks against that record and rejects the real ESP32 —
+> even though the YAML + compiled build are ESP32 (`-DUSE_ESP32_VARIANT_ESP32`,
+> `esp_platform: ESP32` in `.esphome/storage/<node>.yaml.json`). Editing the YAML,
+> renaming, and Ctrl+F5 all fail to fix it. **The fix:** click **Change board →
+> ESP32**, or delete the device and re-create it from this file (which uses
+> `board: esp32dev`, unmistakably classic ESP32) so no wizard C6 tag is stored.
+> Verify: `.esphome/storage/<node>.yaml.json` shows `"esp_platform": "ESP32"`.
 
 ### After flashing
 - **Confirm orientation.** If the first pushed render is sideways or upside down,

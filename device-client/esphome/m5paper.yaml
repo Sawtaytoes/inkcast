@@ -37,7 +37,14 @@ esphome:
       - it8951e.updateslow
 
 esp32:
-  board: m5stack-grey # M5Paper board profile — enables PSRAM + 16 MB flash
+  # Classic ESP32 (the M5Paper is an ESP32-D0WDQ6). Use the generic esp32dev so
+  # ESPHome's Device Builder can't mis-tag the board — if a device is first
+  # CREATED in the builder wizard as an ESP32-C6, the builder stores that chip in
+  # its device record (separate from this YAML) and the installer checks THAT,
+  # causing a "device expects esp32c6" chip mismatch even though the YAML/build
+  # are ESP32. Create the device from this file (or Change board → ESP32), don't
+  # let the wizard pick the chip. PSRAM comes from the psram: block below.
+  board: esp32dev
   framework:
     type: arduino
 
