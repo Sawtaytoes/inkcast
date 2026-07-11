@@ -7,6 +7,7 @@ proposing a change; a settled decision here overrides default instinct.
 
 | Date | Decision | Status |
 | --- | --- | --- |
+| 2026-07-08 | [The M5Paper is an image-mode device that also declares touch + fast-update](2026-07-08-m5paper-image-plus-touch-plus-fast-update.md) | Accepted |
 | 2026-07-07 | [CastKit is one platform: one server, Inkcast (image) and Slatecast (browser) as client modes](2026-07-07-castkit-platform-one-server-two-client-modes.md) | Accepted |
 | 2026-07-07 | [MQTT topics unify flat under `castkit/<id>/…`; fleet migration gated on all devices online](2026-07-07-flat-castkit-topics-migration-gated.md) | Accepted |
 | 2026-07-07 | [Slatecast commands are pure MQTT through HA — no MA WebSocket, no token proxy](2026-07-07-slatecast-pure-mqtt-command-path.md) | Accepted |
