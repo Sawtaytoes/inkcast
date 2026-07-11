@@ -94,9 +94,14 @@ plus `api_encryption_key` in that app's `secrets.yaml`.
    entities and the `set_image` action.
 
 > ⚠️ **Chip-mismatch after a re-create.** If Install shows
-> `Chip mismatch: ... device expects esp32c6`, the browser cached a firmware from
-> when the device was first created as an ESP32‑C6. Hard-refresh (Ctrl+F5) the
-> dashboard and re-Install — this config builds a classic-ESP32 image.
+> `Chip mismatch: ... device expects esp32c6`, the browser (ESPHome dashboard is a
+> PWA) cached the firmware from when the device was first created as an ESP32‑C6.
+> Ctrl+F5 does NOT clear the service-worker cache, and "Retry" re-flashes the same
+> cached blob. **Reliable fix: rename the node** (`esphome: name:` / `node_name`)
+> so every build + download URL changes — the cache can't shadow a new name. Then
+> Install the new card. (Confirm the server build is right first:
+> `docker exec ix-esphome-esphome-1 sh -c "grep board /config/.esphome/build/<node>/platformio.ini"`
+> → `m5stack-grey`.)
 
 ### After flashing
 - **Confirm orientation.** If the first pushed render is sideways or upside down,
