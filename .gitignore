@@ -28,6 +28,9 @@ inkcast.config.*
 !inkcast.config.example.*
 devices.json
 *.local.json
+# ESPHome per-device secrets (wifi + API key) — kept next to the .yaml, never committed
+device-client/esphome/secrets.yaml
+device-client/**/secrets.yaml
 # TLS material for the MQTT broker connection
 certs/
 *.pem
