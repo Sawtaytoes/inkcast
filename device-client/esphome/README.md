@@ -82,7 +82,7 @@ are **mainline** ESPHome — do NOT pull them externally (that conflicts). Board
 > ✅ **Status 2026-07-11: FLASHED, online, and painting.** Node `m5paper` is on
 > WiFi (`<iot-ssid>` → `<panel-ip>`, mDNS `m5paper.local`), native API port
 > 6053 + OTA 3232 open, and a pushed 540×960 image paints correctly. First flash
-> was done with **esptool over USB (<flash-host> COM4)**, updates now go **OTA**.
+> was done with **esptool over USB (<flash-host> <COMx>)**, updates now go **OTA**.
 > Full agent-driven procedure: [`RUNBOOK-agent-flash-and-push.md`](RUNBOOK-agent-flash-and-push.md).
 
 ESPHome runs as its **own TrueNAS app** at `esphome.octen.dev` (container

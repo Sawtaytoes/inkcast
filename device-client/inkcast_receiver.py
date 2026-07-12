@@ -27,7 +27,7 @@ Design notes (Pi Zero W / ARMv6 / 512 MB):
     (inky-phat-fetcher.service) MUST be stopped before this runs.
 
 Environment / config (all optional except the broker host):
-  MQTT_HOST             broker hostname/IP (required; e.g. homeassistant.octen)
+  MQTT_HOST             broker hostname/IP (required; e.g. <ha-host>)
   MQTT_PORT             broker port (default 1883, plain MQTT)
   MQTT_USERNAME         broker username
   MQTT_PASSWORD         broker password

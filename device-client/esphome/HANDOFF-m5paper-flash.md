@@ -18,14 +18,14 @@ the loop entirely (Lead #5):
 1. **Compiled** on the container: `docker exec ix-esphome-esphome-1 sh -c "cd
    /config && esphome compile m5paper.yaml"` → `Successfully compiled` (ESP32).
 2. **Copied** `.esphome/build/m5paper/.pioenvs/m5paper/firmware.factory.bin`
-   (1,190,736 bytes, sha256 `d347ee9f…f42d3bd`) from storeman to the Windows box
-   the M5Paper is plugged into — **`<flash-host>`, COM4** (`USB-Enhanced-SERIAL
+   (1,190,736 bytes, sha256 `d347ee9f…f42d3bd`) from <nas-host> to the Windows box
+   the M5Paper is plugged into — **`<flash-host>`, <COMx>** (`USB-Enhanced-SERIAL
    CH9102`, VID 0x1A86). Verified the hash on both ends.
 3. **Flashed directly** with esptool (installed via `pip install esptool`,
    v5.3.1), which reports the true silicon and never applies a chip gate:
-   - `python -m esptool --chip esp32 --port COM4 flash_id` → **ESP32‑D0WDQ6‑V3,
+   - `python -m esptool --chip esp32 --port <COMx> flash_id` → **ESP32‑D0WDQ6‑V3,
      16 MB flash** (definitively classic ESP32, RISC‑V C6 ruled out at silicon).
-   - `python -m esptool --chip esp32 --port COM4 --baud 460800 write_flash
+   - `python -m esptool --chip esp32 --port <COMx> --baud 460800 write_flash
      --flash_size detect 0x0 firmware.factory.bin` → *Wrote 1190736 bytes … Hash
      of data verified. Hard resetting.*
 4. **Verified online + painting:** `avahi-resolve -n m5paper.local` →
@@ -47,13 +47,12 @@ disagrees with the compiled board, don't chase the YAML — `Download` the
 `firmware.factory.bin` and flash it with `esptool --chip <actual> write_flash
 0x0 …`. It bypasses the manifest `chipFamily` check and reads the real silicon.
 
-> ⚠️ **Doc correction:** the `api_encryption_key` quoted earlier in this handoff
-> (`QlOvaGcK…`) is **stale**. The real key compiled into the firmware, from the
-> ESPHome app's `/config/secrets.yaml`, is `<redacted-see-secrets>`.
-> Always read the live `secrets.yaml`; don't trust a key pasted in a doc.
+> ⚠️ **Never put the `api_encryption_key` (or any secret/PII) in this doc.** An
+> earlier revision pasted a key value here; it's been redacted. The live key is in
+> the ESPHome app's `/config/secrets.yaml` — read it at runtime, never commit it.
 
 **Reachability note (2026-07-11):** the Octen VLANs are **not isolated right
-now**, so HA (`homeassistant.octen`), storeman, and the CloudCLI container all
+now**, so HA (`<ha-host>`), <nas-host>, and the CloudCLI container all
 reach the panel on 6053/3232 across subnets, and the panel reaches LAN HTTP hosts
 — confirmed by HA pinging it 0% loss + `HA→6053 OPEN`. If the IoT VLAN is later
 firewalled, re-verify these paths (runbook has the preflight).
@@ -83,7 +82,7 @@ The firmware itself is written and compiles; only the **flash step** is blocked.
 
 ## The blocker (verbatim)
 
-ESPHome dashboard → Install → Plug into this computer → COM4:
+ESPHome dashboard → Install → Plug into this computer → <COMx>:
 
 ```
 esptool.js
@@ -177,12 +176,12 @@ is the most likely lead (below).
 3. **Confirm WHICH device is being installed.** The dialog title has been
    "M5Paper" / "M5Paper (e-ink)". Confirm the user isn't clicking Install on a
    *different* device entry (there are 8 devices) that is genuinely a C6 config,
-   with the classic-ESP32 M5Paper on COM4. Check every entry's board.
+   with the classic-ESP32 M5Paper on <COMx>. Check every entry's board.
 4. **Try a totally clean browser / different machine.** New browser profile,
    never used with this dashboard → Install. If it works there, it was client
    state all along.
 5. **Bypass the dashboard installer entirely.** `Download` the
-   `firmware.factory.bin` and flash with `esptool`/esptool-js directly to COM4
+   `firmware.factory.bin` and flash with `esptool`/esptool-js directly to <COMx>
    (`esptool --chip esp32 write_flash 0x0 firmware.factory.bin`). This removes the
    manifest/chipFamily check from the loop — if it boots, the firmware was always
    correct and the block is purely the dashboard's chip gate.
@@ -195,10 +194,10 @@ is the most likely lead (below).
 - **ESPHome is a standalone TrueNAS app** at `https://esphome.octen.dev` —
   **NOT** a Home Assistant add-on. (HA's `/config/esphome` is a stray legacy dir;
   ignore it.)
-- Container: `ix-esphome-esphome-1` on storeman (`ssh root@truenas.octen.dev`).
+- Container: `ix-esphome-esphome-1` on <nas-host> (`ssh root@truenas.octen.dev`).
 - Config dir (host): `/mnt/TrueNAS-Apps/App-Configs/esphome/config/` (= `/config`
   in the container). Not mounted into the CloudCLI agent container — reach it via
-  SSH to storeman.
+  SSH to <nas-host>.
 - ESPHome version: **2026.6.5**, framework arduino.
 - Validate: `docker exec ix-esphome-esphome-1 sh -c "cd /config && esphome config m5paper.yaml"`
 - Full compile (catches C++/component breaks; ~50–80s):
@@ -206,7 +205,7 @@ is the most likely lead (below).
 - Build output: `/config/.esphome/build/m5paper/.pioenvs/m5paper/firmware.*.bin`
 - Device Builder record store: `/config/.esphome/.device-builder-devices.json`
 - Docker is NOT reachable from the HA SSH shell (protection mode); it IS reachable
-  from the storeman (TrueNAS) SSH shell.
+  from the <nas-host> (TrueNAS) SSH shell.
 
 ## What IS done and working
 
@@ -220,7 +219,7 @@ is the most likely lead (below).
   2026.3.0+ drives the GT911 interrupt pin as an output, failing on the M5Paper's
   input-only GPIO36 (esphome/esphome#14953). Re-enable after the base works.
 - Secrets already present in `/config/secrets.yaml`: `wifi_ssid`, `wifi_password`,
-  `api_encryption_key` (`QlOvaGcKUba/8lMshlm5BmGW8nY0FDoUu7n3CIdAz58=`),
+  `api_encryption_key` (`<redacted>`),
   `ota_password`.
 
 ## CastKit integration (for AFTER it flashes — server side is DONE)
@@ -229,7 +228,7 @@ is the most likely lead (below).
   `esphome.m5paper_set_image(image_url: "https://castkit.octen.dev/render/<token>.png")`.
 - CastKit is at the LAN host **`https://castkit.octen.dev`** (internal cert) — the
   config sets `http_request: verify_ssl: false`. NOT MQTT, NOT a public URL, NOT
-  `storeman:8788` (all earlier mislabels by the previous agent).
+  `<nas-host>:8788` (all earlier mislabels by the previous agent).
 - Server endpoint already shipped: `POST /api/devices/m5paper/render` →
   `{token, url}`; public `GET /render/<token>.png` (single-use). CastKit device
   entry `m5paper` (540×960 mono) exists in `inkcast.config.example.json`.

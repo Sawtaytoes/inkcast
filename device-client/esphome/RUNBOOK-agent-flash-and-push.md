@@ -23,8 +23,8 @@ pure network.
 ## Fixed facts (verified 2026-07-11)
 
 - **ESPHome is a standalone TrueNAS app**, container `ix-esphome-esphome-1` on
-  storeman. Config dir (host) `/mnt/TrueNAS-Apps/App-Configs/esphome/config` =
-  `/config` in the container. Docker is reachable from the **storeman** SSH shell,
+  <nas-host>. Config dir (host) `/mnt/TrueNAS-Apps/App-Configs/esphome/config` =
+  `/config` in the container. Docker is reachable from the **<nas-host>** SSH shell,
   NOT from the HA SSH shell. ESPHome 2026.6.5.
 - The M5Paper firmware source of truth is **this repo** (`device-client/esphome/`);
   the copy under the ESPHome app config is the deploy target. Keep them in sync.
@@ -32,7 +32,7 @@ pure network.
   (classic ESP32 — NOT C6, see the dashboard-bug note below).
 - **Network:** panel joins WiFi SSID **`<iot-ssid>`** → currently DHCPs to
   `<panel-ip>`, mDNS `m5paper.local`. **The Octen VLANs are NOT isolated
-  right now** — so the container, HA (`homeassistant.octen`), and storeman all
+  right now** — so the container, HA (`<ha-host>`), and <nas-host> all
   reach the panel on **6053** (native API) and **3232** (OTA), and the panel
   reaches LAN HTTP hosts across subnets (it fetched `http://<nas-ip>:8099/…`
   fine, appearing as NAT source `<nat-src>` from other subnets or its own
@@ -47,8 +47,8 @@ pure network.
 ## Reachability preflight (run before any OTA/API/image push)
 
 ```sh
-# panel alive + native API + OTA ports open, from storeman
-ssh root@storeman.octen 'avahi-resolve -n m5paper.local; \
+# panel alive + native API + OTA ports open, from <nas-host>
+ssh root@<nas-host> 'avahi-resolve -n m5paper.local; \
   for p in 6053 3232; do (timeout 3 bash -c "cat </dev/null >/dev/tcp/<panel-ip>/$p" \
     && echo "$p OPEN") || echo "$p closed"; done'
 ```
@@ -57,7 +57,7 @@ ssh root@storeman.octen 'avahi-resolve -n m5paper.local; \
 
 ```sh
 # put the new YAML/components in place on the ESPHome app, then:
-ssh root@storeman.octen 'docker exec ix-esphome-esphome-1 \
+ssh root@<nas-host> 'docker exec ix-esphome-esphome-1 \
   sh -c "cd /config && esphome compile m5paper.yaml"'
 # → "Successfully compiled program." Build artifacts land in
 #   /config/.esphome/build/m5paper/.pioenvs/m5paper/firmware*.bin
@@ -71,16 +71,16 @@ straight to the device with esptool:
 
 ```sh
 # a) copy the merged factory image to the machine the board is cabled to.
-#    (2026-07: M5Paper was on <flash-host> COM4 — USB-Enhanced-SERIAL CH9102, VID 0x1A86)
-scp root@storeman.octen:/mnt/TrueNAS-Apps/App-Configs/esphome/config/.esphome/build/m5paper/.pioenvs/m5paper/firmware.factory.bin /tmp/
+#    (2026-07: M5Paper was on <flash-host> <COMx> — USB-Enhanced-SERIAL CH9102, VID 0x1A86)
+scp root@<nas-host>:/mnt/TrueNAS-Apps/App-Configs/esphome/config/.esphome/build/m5paper/.pioenvs/m5paper/firmware.factory.bin /tmp/
 scp /tmp/firmware.factory.bin <user>@<flash-host>:C:/Users/<user>/firmware.factory.bin   # hash-verify both ends
 
 # b) one-time esptool on that host
 ssh <user>@<flash-host> 'powershell -NoProfile -Command "python -m pip install esptool"'
 
 # c) flash at 0x0, chip forced to the real silicon (bypasses the dashboard chip gate)
-ssh <user>@<flash-host> 'powershell -NoProfile -Command "python -m esptool --chip esp32 --port COM4 flash_id"'   # sanity: reports ESP32-D0WDQ6-V3
-ssh <user>@<flash-host> 'powershell -NoProfile -Command "python -m esptool --chip esp32 --port COM4 --baud 460800 write_flash --flash_size detect 0x0 C:/Users/<user>/firmware.factory.bin"'
+ssh <user>@<flash-host> 'powershell -NoProfile -Command "python -m esptool --chip esp32 --port <COMx> flash_id"'   # sanity: reports ESP32-D0WDQ6-V3
+ssh <user>@<flash-host> 'powershell -NoProfile -Command "python -m esptool --chip esp32 --port <COMx> --baud 460800 write_flash --flash_size detect 0x0 C:/Users/<user>/firmware.factory.bin"'
 # → "Hash of data verified. Hard resetting." Board boots ESPHome, joins WiFi.
 ```
 
@@ -93,7 +93,7 @@ ssh <user>@<flash-host> 'powershell -NoProfile -Command "python -m esptool --chi
 Once ESPHome is on the board, never touch USB again:
 
 ```sh
-ssh root@storeman.octen 'docker exec ix-esphome-esphome-1 \
+ssh root@<nas-host> 'docker exec ix-esphome-esphome-1 \
   sh -c "cd /config && esphome upload m5paper.yaml --device <panel-ip>"'
 # → "OTA successful. Successfully uploaded program." (~5s over WiFi)
 ```
