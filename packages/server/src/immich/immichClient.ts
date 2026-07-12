@@ -429,6 +429,73 @@ export const pickRandomAssetId = async ({
   return pool[pickedIndex]?.id ?? null
 }
 
+/**
+ * Up to `count` DISTINCT recency-weighted random asset ids from the union pool
+ * (weighted pick-without-replacement; newer photos more likely). Returns fewer
+ * than `count` only when the pool is smaller. Used to gather candidates for the
+ * dual-portrait layout, which then keeps the first two that are portrait.
+ */
+export const pickRandomAssetIds = async ({
+  config,
+  personIds,
+  query,
+  recencyHalfLifeDays = DEFAULT_RECENCY_HALF_LIFE_DAYS,
+  count,
+}: {
+  config: ImmichConfig
+  personIds: readonly string[]
+  query?: string
+  recencyHalfLifeDays?: number
+  count: number
+}): Promise<readonly string[]> => {
+  const pool = await buildAssetPool({
+    config,
+    personIds,
+    query,
+  })
+  if (pool.length === 0) {
+    return []
+  }
+  const nowMs = Date.now()
+
+  const drawWithoutReplacement = ({
+    remaining,
+    picked,
+  }: {
+    remaining: readonly AssetPoolEntry[]
+    picked: readonly string[]
+  }): readonly string[] => {
+    if (picked.length >= count || remaining.length === 0) {
+      return picked
+    }
+    const weights = remaining.map((entry) =>
+      computeRecencyWeight({
+        createdAtMs: entry.createdAtMs,
+        nowMs,
+        halfLifeDays: recencyHalfLifeDays,
+      }),
+    )
+    const pickedIndex = pickWeightedIndex({
+      weights,
+      randomValue: Math.random(),
+    })
+    const pickedEntry = remaining[pickedIndex]
+    return drawWithoutReplacement({
+      remaining: remaining.filter(
+        (_entry, entryIndex) => entryIndex !== pickedIndex,
+      ),
+      picked: pickedEntry
+        ? picked.concat(pickedEntry.id)
+        : picked,
+    })
+  }
+
+  return drawWithoutReplacement({
+    remaining: pool,
+    picked: [],
+  })
+}
+
 /** The server-rendered preview JPEG (handles HEIC, pre-sized). */
 export const fetchPreviewJpeg = async ({
   config,

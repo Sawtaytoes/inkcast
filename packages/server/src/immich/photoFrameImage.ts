@@ -129,12 +129,25 @@ export const computeFaceCropRect = ({
   }
 }
 
+/** True when the image is taller than it is wide (portrait orientation). */
+export const isPortraitImage = async ({
+  jpegBytes,
+}: {
+  jpegBytes: Buffer
+}): Promise<boolean> => {
+  const metadata = await sharp(jpegBytes).metadata()
+  const imageWidth = metadata.width ?? 0
+  const imageHeight = metadata.height ?? 0
+  return imageHeight > imageWidth
+}
+
 /**
- * Produce an exactly `targetWidth×targetHeight` PNG: the face-steered maximal
- * cover-crop when the faces fit, else the whole image letterboxed on white.
- * Returns the PNG plus which mode was used (for logging).
+ * Render one JPEG into an exactly `targetWidth×targetHeight` PNG: the
+ * face-steered maximal cover-crop when the faces fit, else the whole image
+ * letterboxed on white. The shared core behind both the single-photo frame and
+ * each half of a dual-portrait composite.
  */
-export const preparePhotoFrameImage = async ({
+const renderToTarget = async ({
   jpegBytes,
   targetWidth,
   targetHeight,
@@ -185,5 +198,121 @@ export const preparePhotoFrameImage = async ({
       faceBoxes.length > 0
         ? "letterbox (faces span too far)"
         : "letterbox (no face data)",
+  }
+}
+
+/**
+ * Produce an exactly `targetWidth×targetHeight` PNG: the face-steered maximal
+ * cover-crop when the faces fit, else the whole image letterboxed on white.
+ * Returns the PNG plus which mode was used (for logging).
+ */
+export const preparePhotoFrameImage = ({
+  jpegBytes,
+  targetWidth,
+  targetHeight,
+  faceBoxes,
+}: {
+  jpegBytes: Buffer
+  targetWidth: number
+  targetHeight: number
+  faceBoxes: readonly FaceBox[]
+}) =>
+  renderToTarget({
+    jpegBytes,
+    targetWidth,
+    targetHeight,
+    faceBoxes,
+  })
+
+/**
+ * Split `targetWidth` into two photo columns separated by a white gutter. The
+ * left column absorbs any odd remainder so the two columns plus the gutter
+ * always sum to exactly `targetWidth`.
+ */
+export const computeDualPortraitColumns = ({
+  targetWidth,
+  gutterPixels,
+}: {
+  targetWidth: number
+  gutterPixels: number
+}) => {
+  const usableWidth = targetWidth - gutterPixels
+  const leftWidth = Math.ceil(usableWidth / 2)
+  const rightWidth = usableWidth - leftWidth
+  return {
+    leftWidth,
+    rightWidth,
+    rightLeftOffset: leftWidth + gutterPixels,
+  }
+}
+
+/**
+ * Compose two portrait photos side by side into one exactly
+ * `targetWidth×targetHeight` PNG. Each photo is face-steered independently into
+ * its own half-panel column (the same crop-or-letterbox logic as a single
+ * frame), and the two columns are composited onto a white canvas with a thin
+ * gutter between them. For landscape image-mode panels (see
+ * docs/decisions/2026-07-12-dual-portrait-photo-layout.md).
+ */
+export const composeDualPortrait = async ({
+  leftJpegBytes,
+  leftFaceBoxes,
+  rightJpegBytes,
+  rightFaceBoxes,
+  targetWidth,
+  targetHeight,
+  gutterPixels,
+}: {
+  leftJpegBytes: Buffer
+  leftFaceBoxes: readonly FaceBox[]
+  rightJpegBytes: Buffer
+  rightFaceBoxes: readonly FaceBox[]
+  targetWidth: number
+  targetHeight: number
+  gutterPixels: number
+}): Promise<{ png: Buffer; mode: string }> => {
+  const { leftWidth, rightWidth, rightLeftOffset } =
+    computeDualPortraitColumns({
+      targetWidth,
+      gutterPixels,
+    })
+
+  const [leftColumn, rightColumn] = await Promise.all([
+    renderToTarget({
+      jpegBytes: leftJpegBytes,
+      targetWidth: leftWidth,
+      targetHeight,
+      faceBoxes: leftFaceBoxes,
+    }),
+    renderToTarget({
+      jpegBytes: rightJpegBytes,
+      targetWidth: rightWidth,
+      targetHeight,
+      faceBoxes: rightFaceBoxes,
+    }),
+  ])
+
+  const png = await sharp({
+    create: {
+      width: targetWidth,
+      height: targetHeight,
+      channels: 3,
+      background: { r: 255, g: 255, b: 255 },
+    },
+  })
+    .composite([
+      { input: leftColumn.png, left: 0, top: 0 },
+      {
+        input: rightColumn.png,
+        left: rightLeftOffset,
+        top: 0,
+      },
+    ])
+    .png()
+    .toBuffer()
+
+  return {
+    png,
+    mode: `dual-portrait (${leftColumn.mode} | ${rightColumn.mode})`,
   }
 }

@@ -41,6 +41,8 @@ import {
   type PanelRotation,
   type PhotoFormat,
   type PhotoFormatSetting,
+  type PhotoLayout,
+  type PhotoLayoutSetting,
 } from "./state/deviceConfigStore.ts"
 import { createDeviceStore } from "./state/deviceStore.ts"
 import { createRenderTokenStore } from "./state/renderTokenStore.ts"
@@ -137,6 +139,7 @@ const PHOTO_FORMAT_OPTION_BY_SETTING: Record<
 // zone are MQTT config.
 const DEFAULT_CLOCK_TIME_FORMAT: ClockTimeFormat = "12h"
 const DEFAULT_CLOCK_DATE_STYLE: ClockDateStyle = "long"
+const DEFAULT_PHOTO_LAYOUT: PhotoLayout = "single"
 
 /** The exact HA option string for a time-format setting (matches the select). */
 const CLOCK_TIME_FORMAT_OPTION_BY_SETTING: Record<
@@ -196,6 +199,36 @@ const parseClockDateStyleSetting = (
   }
   if (normalized === "numeric") {
     return "numeric"
+  }
+  return null
+}
+
+/** The exact HA option string for a photo-layout setting (matches the select). */
+const PHOTO_LAYOUT_OPTION_BY_SETTING: Record<
+  PhotoLayoutSetting,
+  string
+> = {
+  auto: "Auto",
+  single: "Single",
+  "dual-portrait": "Dual Portrait",
+}
+
+/** Canonicalize an HA photo-layout option payload to a setting, or null. */
+const parsePhotoLayoutSetting = (
+  payload: string,
+): PhotoLayoutSetting | null => {
+  const normalized = payload.trim().toLowerCase()
+  if (normalized === "auto") {
+    return "auto"
+  }
+  if (normalized === "single") {
+    return "single"
+  }
+  if (
+    normalized === "dual portrait" ||
+    normalized === "dual-portrait"
+  ) {
+    return "dual-portrait"
   }
   return null
 }
@@ -335,6 +368,19 @@ const main = async () => {
           DEFAULT_PHOTO_QUALITY)
 
     return { format, quality }
+  }
+  // The Photo Frame layout, resolved per device: a real per-device value wins;
+  // "auto" (or unset) inherits the global default; and if neither is set the
+  // single-photo fallback applies.
+  const resolvePhotoLayout = (
+    deviceId: string,
+  ): PhotoLayout => {
+    const setting =
+      deviceConfigStore.getPhotoLayout(deviceId)
+    return setting && setting !== "auto"
+      ? setting
+      : (deviceConfigStore.getGlobalPhotoLayout() ??
+          DEFAULT_PHOTO_LAYOUT)
   }
   // The clock timezone + time/date format, resolved per device: a real
   // per-device value wins; "Auto"/empty inherit the global default; and if
@@ -562,6 +608,7 @@ const main = async () => {
         getIntervalMinutes: resolvePhotoIntervalMinutes,
         getRecencyHalfLifeDays:
           resolvePhotoRecencyHalfLifeDays,
+        getPhotoLayout: resolvePhotoLayout,
         devices: config.devices,
         deviceConfigStore,
         viewDataStore,
@@ -828,6 +875,29 @@ const main = async () => {
           },
         ],
         [
+          "photoLayout",
+          {
+            applyPayload: ({ deviceId, payload }) => {
+              const setting =
+                parsePhotoLayoutSetting(payload)
+              if (setting === null) {
+                return null
+              }
+              deviceConfigStore.setPhotoLayout({
+                deviceId,
+                setting,
+              })
+              return PHOTO_LAYOUT_OPTION_BY_SETTING[setting]
+            },
+            getHasValue: (deviceId) =>
+              deviceConfigStore.getPhotoLayout(deviceId) !==
+              undefined,
+            onApplied: async (deviceId) => {
+              await pushController.pushDevice(deviceId)
+            },
+          },
+        ],
+        [
           "dither",
           {
             applyPayload: ({ deviceId, payload }) => {
@@ -1026,6 +1096,10 @@ const main = async () => {
         clockDateStyle: {
           command: topics.clockDateStyleCommand,
           state: topics.clockDateStyleState,
+        },
+        photoLayout: {
+          command: topics.photoLayoutCommand,
+          state: topics.photoLayoutState,
         },
         dither: {
           command: topics.ditherCommand,
@@ -1294,6 +1368,30 @@ const main = async () => {
           seedDefault:
             CLOCK_DATE_STYLE_OPTION_BY_SETTING[
               DEFAULT_CLOCK_DATE_STYLE
+            ],
+        },
+      ],
+      [
+        "photoLayout",
+        {
+          command: globalTopics.photoLayoutCommand,
+          state: globalTopics.photoLayoutState,
+          applyPayload: (payload) => {
+            const setting = parsePhotoLayoutSetting(payload)
+            // The global default has no "Auto" — it IS the root default.
+            if (setting === null || setting === "auto") {
+              return null
+            }
+            deviceConfigStore.setGlobalPhotoLayout(setting)
+            return PHOTO_LAYOUT_OPTION_BY_SETTING[setting]
+          },
+          getHasValue: () =>
+            deviceConfigStore.getGlobalPhotoLayout() !==
+            undefined,
+          afterChange: refreshAllPhotoFrameDevices,
+          seedDefault:
+            PHOTO_LAYOUT_OPTION_BY_SETTING[
+              DEFAULT_PHOTO_LAYOUT
             ],
         },
       ],
@@ -1676,6 +1774,14 @@ const main = async () => {
             kind: "clockDateStyle",
             hasValue:
               deviceConfigStore.getClockDateStyle(
+                device.id,
+              ) !== undefined,
+            payload: "Auto",
+          },
+          {
+            kind: "photoLayout",
+            hasValue:
+              deviceConfigStore.getPhotoLayout(
                 device.id,
               ) !== undefined,
             payload: "Auto",

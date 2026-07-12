@@ -24,6 +24,7 @@ const buildAdapter = () => {
     },
     getIntervalMinutes: () => 30,
     getRecencyHalfLifeDays: () => 30,
+    getPhotoLayout: () => "single",
     devices: [buildDevice()],
     deviceConfigStore,
     viewDataStore,

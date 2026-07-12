@@ -76,6 +76,7 @@ describe("buildDiscoveryMessages", () => {
       "number", // Photo Frame: Rotation minutes
       "number", // Photo Frame: Recency half-life days
       "select", // Photo Frame: Format
+      "select", // Photo Frame: Layout
       "number", // Photo Frame: Quality
       "button", // Photo Frame: Next photo
       "button", // Photo Frame: Previous photo
@@ -96,6 +97,7 @@ describe("buildDiscoveryMessages", () => {
       "homeassistant/number/inkcast/server_photo_interval/config",
       "homeassistant/number/inkcast/server_photo_recency/config",
       "homeassistant/select/inkcast/server_photo_format/config",
+      "homeassistant/select/inkcast/server_photo_layout/config",
       "homeassistant/number/inkcast/server_photo_quality/config",
     ])
     expect(

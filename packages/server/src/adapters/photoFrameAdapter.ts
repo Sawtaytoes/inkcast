@@ -5,15 +5,34 @@ import {
   fetchPreviewJpeg,
   type ImmichConfig,
   pickRandomAssetId,
+  pickRandomAssetIds,
   resolvePersonIds,
 } from "../immich/immichClient.ts"
-import { preparePhotoFrameImage } from "../immich/photoFrameImage.ts"
-import type { DeviceConfigStore } from "../state/deviceConfigStore.ts"
+import {
+  composeDualPortrait,
+  isPortraitImage,
+  preparePhotoFrameImage,
+} from "../immich/photoFrameImage.ts"
+import type {
+  DeviceConfigStore,
+  PhotoLayout,
+} from "../state/deviceConfigStore.ts"
 import type { ViewDataStore } from "../state/viewDataStore.ts"
 import type { ViewName } from "../views/registry.ts"
 
 const TICK_MILLISECONDS = 60_000
 const HISTORY_LIMIT = 20
+
+/** White seam between the two photos in a dual-portrait composite, native px. */
+const DUAL_PORTRAIT_GUTTER_PIXELS = 8
+
+/**
+ * How many candidate assets to draw when building a dual-portrait frame. We
+ * keep the first two that are portrait; drawing a handful makes it likely two
+ * portraits turn up even in a mixed-orientation pool before we fall back to a
+ * single photo.
+ */
+const DUAL_PORTRAIT_CANDIDATE_DRAW = 6
 
 type PhotoHistory = {
   assetIds: readonly string[]
@@ -34,6 +53,7 @@ export const createPhotoFrameAdapter = ({
   immichConfig,
   getIntervalMinutes,
   getRecencyHalfLifeDays,
+  getPhotoLayout,
   devices,
   deviceConfigStore,
   viewDataStore,
@@ -45,6 +65,8 @@ export const createPhotoFrameAdapter = ({
   getIntervalMinutes: (deviceId: string) => number
   /** Recency half-life for a device, days (resolved live from HA config). */
   getRecencyHalfLifeDays: (deviceId: string) => number
+  /** Photo layout for a device (resolved live from HA config). */
+  getPhotoLayout: (deviceId: string) => PhotoLayout
   devices: readonly ConfiguredDevice[]
   deviceConfigStore: DeviceConfigStore
   viewDataStore: ViewDataStore
@@ -154,6 +176,106 @@ export const createPhotoFrameAdapter = ({
   }
 
   /**
+   * Try to build a dual-portrait frame: two portrait photos face-steered into
+   * their own half-panel columns and composited side by side. Draws a handful
+   * of candidates and keeps the first two that are portrait. Returns false
+   * (caller falls back to a single photo) when fewer than two portraits turn
+   * up. The primary (left) asset is what history records.
+   */
+  const showDualPortrait = async ({
+    device,
+    source,
+  }: {
+    device: ConfiguredDevice
+    source: {
+      personIds: readonly string[]
+      queryText: string
+    }
+  }) => {
+    const candidateAssetIds = await pickRandomAssetIds({
+      config: immichConfig,
+      personIds: source.personIds,
+      query: source.queryText || undefined,
+      recencyHalfLifeDays: getRecencyHalfLifeDays(
+        device.id,
+      ),
+      count: DUAL_PORTRAIT_CANDIDATE_DRAW,
+    })
+
+    const candidates = await Promise.all(
+      candidateAssetIds.map(async (assetId) => {
+        try {
+          const jpegBytes = await fetchPreviewJpeg({
+            config: immichConfig,
+            assetId,
+          })
+          return {
+            assetId,
+            jpegBytes,
+            isPortrait: await isPortraitImage({
+              jpegBytes,
+            }),
+          }
+        } catch {
+          return null
+        }
+      }),
+    )
+    const portraits = candidates
+      .filter((candidate) => candidate?.isPortrait)
+      .slice(0, 2)
+    if (portraits.length < 2) {
+      return false
+    }
+
+    const [left, right] = portraits as [
+      NonNullable<(typeof portraits)[number]>,
+      NonNullable<(typeof portraits)[number]>,
+    ]
+    const [leftFaceBoxes, rightFaceBoxes] =
+      await Promise.all([
+        fetchFaceBoxes({
+          config: immichConfig,
+          assetId: left.assetId,
+          personIds: source.personIds,
+        }),
+        fetchFaceBoxes({
+          config: immichConfig,
+          assetId: right.assetId,
+          personIds: source.personIds,
+        }),
+      ])
+
+    const { png, mode } = await composeDualPortrait({
+      leftJpegBytes: left.jpegBytes,
+      leftFaceBoxes,
+      rightJpegBytes: right.jpegBytes,
+      rightFaceBoxes,
+      targetWidth: device.width,
+      targetHeight: device.height,
+      gutterPixels: DUAL_PORTRAIT_GUTTER_PIXELS,
+    })
+
+    viewDataStore.setPhotoFrame({
+      deviceId: device.id,
+      data: {
+        photoDataUri: `data:image/png;base64,${png.toString("base64")}`,
+        assetId: left.assetId,
+        fetchedAtMs: Date.now(),
+      },
+    })
+    console.log(
+      `[inkcast] photo frame ${device.id}: assets ${left.assetId.slice(0, 8)} + ${right.assetId.slice(0, 8)} [${mode}]`,
+    )
+    recordShownAsset({
+      deviceId: device.id,
+      assetId: left.assetId,
+    })
+    await pushDevice(device.id)
+    return true
+  }
+
+  /**
    * Fetch + crop + store + push a fresh random photo for the device. Returns
    * true only when a photo was actually pushed — false when nothing is
    * configured, nothing matched, or the fetch failed (so callers can decide
@@ -171,6 +293,22 @@ export const createPhotoFrameAdapter = ({
       const source = await resolvePhotoSource(deviceId)
       if (!source) {
         return false
+      }
+
+      // Landscape panels set to dual-portrait try two side-by-side portraits
+      // first; showDualPortrait returns false (and we fall through to a single
+      // photo) when two portraits aren't available this cycle.
+      const isDualPortrait =
+        getPhotoLayout(deviceId) === "dual-portrait" &&
+        device.width > device.height
+      if (isDualPortrait) {
+        const hasShownDual = await showDualPortrait({
+          device,
+          source,
+        })
+        if (hasShownDual) {
+          return true
+        }
       }
 
       const assetId = await pickRandomAssetId({

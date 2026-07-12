@@ -39,6 +39,16 @@ export type ClockDateStyle = "long" | "numeric"
 export type ClockDateStyleSetting = ClockDateStyle | "auto"
 
 /**
+ * Photo Frame layout: `single` (one photo fills the panel) or `dual-portrait`
+ * (two portrait photos side by side). Global default + per-device override, both
+ * HA config entities.
+ */
+export type PhotoLayout = "single" | "dual-portrait"
+
+/** A per-device photo-layout override, or "auto" = inherit the global default. */
+export type PhotoLayoutSetting = PhotoLayout | "auto"
+
+/**
  * Clockwise degrees the server rotates a render before the panel draws it —
  * the physical mount orientation. Matches `DeviceMetadata.rotation`. Exposed as
  * a per-device HA config entity so a remounted/upside-down panel is corrected
@@ -180,6 +190,20 @@ export type DeviceConfigStore = {
   /** Global default clock date style. */
   getGlobalClockDateStyle: () => ClockDateStyle | undefined
   setGlobalClockDateStyle: (style: ClockDateStyle) => void
+  /**
+   * Per-device Photo Frame layout. `undefined` or `"auto"` = inherit the global
+   * default below.
+   */
+  getPhotoLayout: (
+    deviceId: string,
+  ) => PhotoLayoutSetting | undefined
+  setPhotoLayout: (params: {
+    deviceId: string
+    setting: PhotoLayoutSetting
+  }) => void
+  /** Global default Photo Frame layout. */
+  getGlobalPhotoLayout: () => PhotoLayout | undefined
+  setGlobalPhotoLayout: (layout: PhotoLayout) => void
   /** Override of the device's registered dither algorithm, if any. */
   getDitherAlgorithm: (
     deviceId: string,
@@ -285,6 +309,14 @@ export const createDeviceConfigStore =
       "global",
       ClockDateStyle
     >()
+    const photoLayoutByDeviceId = new Map<
+      string,
+      PhotoLayoutSetting
+    >()
+    const globalPhotoLayoutHolder = new Map<
+      "global",
+      PhotoLayout
+    >()
     const ditherByDeviceId = new Map<
       string,
       DitherAlgorithm
@@ -362,6 +394,16 @@ export const createDeviceConfigStore =
         globalClockDateStyleHolder.get("global"),
       setGlobalClockDateStyle: (style) => {
         globalClockDateStyleHolder.set("global", style)
+      },
+      getPhotoLayout: (deviceId) =>
+        photoLayoutByDeviceId.get(deviceId),
+      setPhotoLayout: ({ deviceId, setting }) => {
+        photoLayoutByDeviceId.set(deviceId, setting)
+      },
+      getGlobalPhotoLayout: () =>
+        globalPhotoLayoutHolder.get("global"),
+      setGlobalPhotoLayout: (layout) => {
+        globalPhotoLayoutHolder.set("global", layout)
       },
       getPhotoIntervalMinutes: (deviceId) =>
         photoIntervalByDeviceId.get(deviceId),

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest"
-import { computeFaceCropRect } from "./photoFrameImage.ts"
+import {
+  computeDualPortraitColumns,
+  computeFaceCropRect,
+} from "./photoFrameImage.ts"
 
 const PANEL = { targetWidth: 800, targetHeight: 480 }
 
@@ -101,6 +104,33 @@ describe("computeFaceCropRect", () => {
         ],
       }),
     ).toBe(null)
+  })
+
+  test("dual-portrait columns + gutter sum to the full width (even)", () => {
+    const columns = computeDualPortraitColumns({
+      targetWidth: 800,
+      gutterPixels: 8,
+    })
+    expect(columns.leftWidth).toBe(396)
+    expect(columns.rightWidth).toBe(396)
+    expect(columns.rightLeftOffset).toBe(404)
+    expect(columns.leftWidth + 8 + columns.rightWidth).toBe(
+      800,
+    )
+  })
+
+  test("dual-portrait left column absorbs the odd remainder", () => {
+    const columns = computeDualPortraitColumns({
+      targetWidth: 1601,
+      gutterPixels: 10,
+    })
+    // usable 1591 → left ceil(795.5)=796, right 795, right offset 806.
+    expect(columns.leftWidth).toBe(796)
+    expect(columns.rightWidth).toBe(795)
+    expect(columns.rightLeftOffset).toBe(806)
+    expect(
+      columns.leftWidth + 10 + columns.rightWidth,
+    ).toBe(1601)
   })
 
   test("clamps the crop inside the image for an edge face", () => {
