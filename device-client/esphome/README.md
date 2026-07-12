@@ -79,31 +79,48 @@ are **mainline** ESPHome — do NOT pull them externally (that conflicts). Board
 
 ## First-flash checklist
 
+> ✅ **Status 2026-07-11: FLASHED, online, and painting.** Node `m5paper` is on
+> WiFi (`<iot-ssid>` → `<panel-ip>`, mDNS `m5paper.local`), native API port
+> 6053 + OTA 3232 open, and a pushed 540×960 image paints correctly. First flash
+> was done with **esptool over USB (<flash-host> COM4)**, updates now go **OTA**.
+> Full agent-driven procedure: [`RUNBOOK-agent-flash-and-push.md`](RUNBOOK-agent-flash-and-push.md).
+
 ESPHome runs as its **own TrueNAS app** at `esphome.octen.dev` (container
 `ix-esphome-esphome-1`, config at `/mnt/TrueNAS-Apps/App-Configs/esphome/config`)
 — **not** a Home Assistant add-on. Deploy `m5paper.yaml` + `components/` there,
 plus `api_encryption_key` in that app's `secrets.yaml`.
 
-1. Open the **ESPHome dashboard** (`esphome.octen.dev`) — the **m5paper** node
-   appears.
-2. With the M5Paper plugged into **this computer** over USB, click
-   **Install → Plug into this computer** (browser WebSerial). It compiles + flashes
-   over serial. Later updates go **OTA**.
-3. **Adopt in Home Assistant.** The ESPHome integration auto-discovers the node;
-   the encryption key is the `api_encryption_key` secret. You'll get the button
-   entities and the `set_image` action.
+**Do NOT use the dashboard "Install → Plug into this computer" flow** — it is
+broken by an upstream bug (below). Flash with esptool instead:
 
-> ⚠️ **`Chip mismatch: ... device expects esp32c6` — the Device Builder's board
-> record, NOT the YAML.** ESPHome's new Device Builder stores the chip/board in
-> the **device record** (set when the wizard created the device), separate from
-> the `esp32: board:` in the YAML text. If the device was first created as an
-> ESP32‑C6, the installer checks against that record and rejects the real ESP32 —
-> even though the YAML + compiled build are ESP32 (`-DUSE_ESP32_VARIANT_ESP32`,
-> `esp_platform: ESP32` in `.esphome/storage/<node>.yaml.json`). Editing the YAML,
-> renaming, and Ctrl+F5 all fail to fix it. **The fix:** click **Change board →
-> ESP32**, or delete the device and re-create it from this file (which uses
-> `board: esp32dev`, unmistakably classic ESP32) so no wizard C6 tag is stored.
-> Verify: `.esphome/storage/<node>.yaml.json` shows `"esp_platform": "ESP32"`.
+1. Compile on the container:
+   `docker exec ix-esphome-esphome-1 sh -c "cd /config && esphome compile m5paper.yaml"`.
+2. **First flash (blank board):** copy
+   `.esphome/build/m5paper/.pioenvs/m5paper/firmware.factory.bin` to the machine the
+   board is cabled to and flash it:
+   `python -m esptool --chip esp32 --port <COMx> --baud 460800 write_flash --flash_size detect 0x0 firmware.factory.bin`.
+   → *Hash of data verified.* (See the runbook for the exact copy/verify steps.)
+3. **Updates:** OTA, no cable —
+   `docker exec ix-esphome-esphome-1 sh -c "cd /config && esphome upload m5paper.yaml --device <panel-ip>"`.
+   ⚠️ OTA reboots the board, which re-runs `on_boot`’s `it8951e.clear` → the panel
+   blanks until an image is pushed again.
+4. **Adopt in Home Assistant** (optional). The ESPHome integration auto-discovers
+   the node; the encryption key is the `api_encryption_key` secret. You get the
+   button entities and the `set_image` action. (You can also drive `set_image`
+   directly with `aioesphomeapi` — see the runbook — no HA needed.)
+
+> ⚠️ **`Chip mismatch: ... device expects esp32c6` is an upstream dashboard bug —
+> flash with esptool/OTA, don't fight it.** The compiled build and this YAML are
+> classic ESP32 (`-DUSE_ESP32_VARIANT_ESP32`, `esp_platform: ESP32`; esptool reads
+> the silicon as **ESP32‑D0WDQ6‑V3, 16 MB**). Only the browser installer's manifest
+> `chipFamily` is wrong — it comes from a defaulted `ESP32‑C6‑DevKitM‑1` device
+> record, independent of the compiled variant. Editing the YAML, renaming, and
+> Ctrl+F5 all fail. Same class as
+> [esphome/dashboard #776](https://github.com/esphome/dashboard/issues/776); no new
+> report needed. **esptool `write_flash --chip esp32` (first flash) and `esphome
+> upload` OTA (updates) both bypass the manifest entirely** and are the sanctioned
+> path here. ("Change board → ESP32" in the Device Builder UI may also clear it, but
+> the esptool/OTA route is what's verified working.)
 
 ### After flashing
 - **Confirm orientation.** If the first pushed render is sideways or upside down,

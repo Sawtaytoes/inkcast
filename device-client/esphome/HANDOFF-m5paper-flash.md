@@ -28,18 +28,42 @@ the loop entirely (Lead #5):
    - `python -m esptool --chip esp32 --port COM4 --baud 460800 write_flash
      --flash_size detect 0x0 firmware.factory.bin` → *Wrote 1190736 bytes … Hash
      of data verified. Hard resetting.*
-4. **Verified online:** `avahi-resolve -n m5paper.local` → `<panel-ip>`
-   (IoT VLAN); pings 0% loss; ESPHome API port **6053 open**.
+4. **Verified online + painting:** `avahi-resolve -n m5paper.local` →
+   `<panel-ip>` (SSID `<iot-ssid>`); pings 0% loss; API **6053** + OTA **3232**
+   open. Pushed a 540×960 1-bit test PNG via the native-API `set_image` action
+   (`aioesphomeapi`, noise key) → the panel GET-fetched it and repainted. So the
+   full display + `online_image` + `set_image` path works, not just the flash.
+5. **OTA update path proven:** `esphome upload m5paper.yaml --device <panel-ip>`
+   from the container → *OTA successful*. After first USB flash, all updates are
+   hands-off over WiFi. Full agent procedure: `RUNBOOK-agent-flash-and-push.md`.
+
+**The C6 gate is a known upstream dashboard bug** — same class as
+[esphome/dashboard #776](https://github.com/esphome/dashboard/issues/776) (the
+web-install manifest's `chipFamily` is wrong/defaulted to C6, independent of the
+compiled variant). Not our firmware; no new report needed.
 
 **Takeaway for next time:** when the ESPHome dashboard installer's chip gate
 disagrees with the compiled board, don't chase the YAML — `Download` the
 `firmware.factory.bin` and flash it with `esptool --chip <actual> write_flash
 0x0 …`. It bypasses the manifest `chipFamily` check and reads the real silicon.
 
-**Remaining (not part of the flash blocker):** HA adoption of the ESPHome device
-+ the `set_image` automation wiring (server side is already done — see below).
-Note the panel came up on `<iot-subnet>.x` (IoT VLAN), so confirm HA↔panel
-reachability on port 6053 before wiring the automation.
+> ⚠️ **Doc correction:** the `api_encryption_key` quoted earlier in this handoff
+> (`QlOvaGcK…`) is **stale**. The real key compiled into the firmware, from the
+> ESPHome app's `/config/secrets.yaml`, is `<redacted-see-secrets>`.
+> Always read the live `secrets.yaml`; don't trust a key pasted in a doc.
+
+**Reachability note (2026-07-11):** the Octen VLANs are **not isolated right
+now**, so HA (`homeassistant.octen`), storeman, and the CloudCLI container all
+reach the panel on 6053/3232 across subnets, and the panel reaches LAN HTTP hosts
+— confirmed by HA pinging it 0% loss + `HA→6053 OPEN`. If the IoT VLAN is later
+firewalled, re-verify these paths (runbook has the preflight).
+
+**Remaining (not part of the flash blocker):** (a) the CastKit render endpoint
+`POST /api/devices/m5paper/render` currently returns **404** — the server push
+path is NOT wired end-to-end despite earlier "server side done" claims; direct
+`set_image` works today. (b) HA adoption + automation wiring. (c) `on_boot` runs
+`it8951e.clear`, so the panel blanks on every reboot/OTA — this contradicts the
+design doc's "don't clear on boot" crash-recovery guidance; consider dropping it.
 
 ---
 
