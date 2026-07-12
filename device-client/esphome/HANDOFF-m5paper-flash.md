@@ -1,5 +1,50 @@
 # HANDOFF — M5Paper ESPHome flash blocked by `device expects esp32c6`
 
+Status: **RESOLVED 2026-07-11 — flashed via esptool, bypassing the dashboard
+installer (the handoff's Lead #5).** The M5Paper is up on WiFi and reachable
+over the ESPHome API. The rest of this doc is preserved as the paper trail.
+
+## RESOLUTION (2026-07-11)
+
+The block was purely the ESPHome **Device Builder browser installer** serving an
+`esp32c6` manifest (`chipFamily`) for a device whose every server-side artifact
+is classic ESP32 — a dashboard/UI bug, not a firmware or hardware problem. The
+editor header showing "ESP32‑C6‑DevKitM‑1" (Untried lead #1) was the tell.
+Confirmed there is **no real `esp32c6` string anywhere** in the config, build,
+storage, or `.device-builder.json` (the one grep hit, `178c8bbfeac6`, is a
+job-id hash). So rather than fight the dashboard's chip gate, we removed it from
+the loop entirely (Lead #5):
+
+1. **Compiled** on the container: `docker exec ix-esphome-esphome-1 sh -c "cd
+   /config && esphome compile m5paper.yaml"` → `Successfully compiled` (ESP32).
+2. **Copied** `.esphome/build/m5paper/.pioenvs/m5paper/firmware.factory.bin`
+   (1,190,736 bytes, sha256 `d347ee9f…f42d3bd`) from storeman to the Windows box
+   the M5Paper is plugged into — **`<flash-host>`, COM4** (`USB-Enhanced-SERIAL
+   CH9102`, VID 0x1A86). Verified the hash on both ends.
+3. **Flashed directly** with esptool (installed via `pip install esptool`,
+   v5.3.1), which reports the true silicon and never applies a chip gate:
+   - `python -m esptool --chip esp32 --port COM4 flash_id` → **ESP32‑D0WDQ6‑V3,
+     16 MB flash** (definitively classic ESP32, RISC‑V C6 ruled out at silicon).
+   - `python -m esptool --chip esp32 --port COM4 --baud 460800 write_flash
+     --flash_size detect 0x0 firmware.factory.bin` → *Wrote 1190736 bytes … Hash
+     of data verified. Hard resetting.*
+4. **Verified online:** `avahi-resolve -n m5paper.local` → `<panel-ip>`
+   (IoT VLAN); pings 0% loss; ESPHome API port **6053 open**.
+
+**Takeaway for next time:** when the ESPHome dashboard installer's chip gate
+disagrees with the compiled board, don't chase the YAML — `Download` the
+`firmware.factory.bin` and flash it with `esptool --chip <actual> write_flash
+0x0 …`. It bypasses the manifest `chipFamily` check and reads the real silicon.
+
+**Remaining (not part of the flash blocker):** HA adoption of the ESPHome device
++ the `set_image` automation wiring (server side is already done — see below).
+Note the panel came up on `<iot-subnet>.x` (IoT VLAN), so confirm HA↔panel
+reachability on port 6053 before wiring the automation.
+
+---
+
+_Original handoff (blocked state) below, preserved verbatim:_
+
 Status: **BLOCKED at flashing.** The config compiles to a valid ESP32 firmware,
 but the ESPHome browser installer aborts with a chip mismatch every time. This
 doc is written for a fresh agent to take over. It records ground-truth facts,
