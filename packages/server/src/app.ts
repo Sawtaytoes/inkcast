@@ -141,24 +141,19 @@ export const createApp = ({
       return context.json({ error: "token not found or already used" }, 404)
     }
 
-    // Stream the PNG, then evict the token once the whole body has been handed
-    // to the runtime for flush (stream closed). fetchToken() above already
-    // captured the buffer and marked the entry in-flight, so a concurrent retry
-    // that arrives before this stream closes still finds the token — we never
-    // evict on request-receipt. `cancel` covers a client that aborts mid-transfer.
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new Uint8Array(png))
-        controller.close()
-        renderTokenStore.evictToken(token)
-      },
-      cancel() {
-        renderTokenStore.evictToken(token)
-      },
-    })
+    // Copy the bytes into a fixed-length response, then evict (single-use).
+    // A fixed-length body carries a Content-Length header, which the ESP32
+    // `online_image`/`http_request` client REQUIRES: a chunked/streamed reply
+    // reports "Size: 0" on-device and the decode stalls forever (panel never
+    // paints). We evict on serve rather than after-flush — for a ~40 KB LAN
+    // fetch that's a single clean request, and the TTL sweeper still covers a
+    // token that's minted but never fetched.
+    const body = new Uint8Array(png)
+    renderTokenStore.evictToken(token)
 
     return context.body(body, 200, {
       "Content-Type": "image/png",
+      "Content-Length": String(body.byteLength),
       "Cache-Control": "no-store",
     })
   })
