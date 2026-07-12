@@ -27,14 +27,14 @@ type TokenEntry = {
   inFlight: boolean
 }
 
-export const createRenderTokenStore({
+export const createRenderTokenStore = ({
   ttlMinutes = 10,
 }: {
   ttlMinutes?: number
-} = {}): RenderTokenStore {
+} = {}): RenderTokenStore => {
   const ttlMs = ttlMinutes * 60 * 1000
   const store = new Map<string, TokenEntry>()
-  let sweeperInterval: NodeJS.Timer | null = null
+  let sweeperInterval: ReturnType<typeof setInterval> | null = null
 
   return {
     createToken: (png: Buffer) => {

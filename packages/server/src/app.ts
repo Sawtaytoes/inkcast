@@ -138,19 +138,26 @@ export const createApp = ({
       return context.json({ error: "token not found or already used" }, 404)
     }
 
-    const response = context.body(new Uint8Array(png), 200, {
+    // Stream the PNG, then evict the token once the whole body has been handed
+    // to the runtime for flush (stream closed). fetchToken() above already
+    // captured the buffer and marked the entry in-flight, so a concurrent retry
+    // that arrives before this stream closes still finds the token — we never
+    // evict on request-receipt. `cancel` covers a client that aborts mid-transfer.
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(png))
+        controller.close()
+        renderTokenStore.evictToken(token)
+      },
+      cancel() {
+        renderTokenStore.evictToken(token)
+      },
+    })
+
+    return context.body(body, 200, {
       "Content-Type": "image/png",
       "Cache-Control": "no-store",
     })
-
-    // Evict the token after the response fully flushes (all bytes sent + response closed).
-    // This happens in the middleware/after-response hook, ensuring retries mid-flight
-    // can still fetch the same token.
-    context.res.on?.("finish", () => {
-      renderTokenStore.evictToken(token)
-    })
-
-    return response
   })
 
   return app
