@@ -10,23 +10,25 @@
 
 A landscape image-mode panel (e.g. the 13.3" e-ink Photo Frames) can render
 **two portrait photos side by side** in a single frame instead of one
-letterboxed/cover-cropped photo. This is opt-in per device via a new
-**"Photo Layout"** HA config entity (global default + per-device override):
+letterboxed/cover-cropped photo. It is a distinct **view** — `Photo Frame
+(Duo)` — selected through the existing HA View select over MQTT, **not** a
+config knob. (An earlier draft made it a "Photo Layout" config entity; it was
+reworked into a view before shipping so displays are chosen the same way as
+every other view — through automations that set the View select. There are
+three photo views: `Photo Frame` (letterbox), `Photo Frame (Fill)`, `Photo
+Frame (Duo)`.)
 
-- `single` (default) — the existing one-photo-per-frame behavior. Nothing
-  changes for any screen until this is flipped.
-- `dual-portrait` — the server picks two portrait assets, face-steers each into
-  its own half-panel window (reusing `computeFaceCropRect`), and composites them
-  with a thin white gutter into one panel-sized PNG.
+When a device is on `Photo Frame (Duo)` and the panel is landscape, the server
+picks two portrait assets, face-steers each into its own half-panel column
+(reusing the fill crop so a column never letterboxes) and composites them with a
+thin white gutter into one panel-sized PNG. The composition is **server-side**
+(Inkcast image mode): the device still just draws one PNG. On a portrait panel
+the view falls back to a single photo.
 
-The composition is **server-side** (Inkcast image mode): the device still just
-draws one PNG. It works for any landscape image-mode panel; it is a no-op on
-portrait panels.
-
-**Fallback:** in `dual-portrait`, when two *portrait* assets aren't available
-this cycle (only landscape matches, or the pool is too small), the frame falls
-back to a single full-panel photo. A frame is always shown; the layout never
-leaves the panel blank or half-empty.
+**Fallback:** on `Photo Frame (Duo)`, when two *portrait* assets aren't
+available this cycle (only landscape matches, or the pool is too small), the
+frame falls back to a single full-panel (fill) photo. A frame is always shown;
+the view never leaves the panel blank or half-empty.
 
 ## Context
 

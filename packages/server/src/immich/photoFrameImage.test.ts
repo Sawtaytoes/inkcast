@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 import {
   computeDualPortraitColumns,
   computeFaceCropRect,
+  computeFillCropRect,
 } from "./photoFrameImage.ts"
 
 const PANEL = { targetWidth: 800, targetHeight: 480 }
@@ -104,6 +105,55 @@ describe("computeFaceCropRect", () => {
         ],
       }),
     ).toBe(null)
+  })
+
+  test("fill: fills the panel (never null) when faces span too far", () => {
+    // Same faces that make computeFaceCropRect letterbox (return null): here
+    // fill must still return a crop that fills the panel, centred on the mass.
+    const cropRect = computeFillCropRect({
+      imageWidth: 1000,
+      imageHeight: 1000,
+      ...PANEL,
+      faceBoxes: [
+        { x1: 0.4, y1: 0.02, x2: 0.6, y2: 0.2 },
+        { x1: 0.4, y1: 0.8, x2: 0.6, y2: 0.98 },
+      ],
+    })
+    // Maximal window is 1000×600; the crop fills that, centred vertically on
+    // the face mass (midpoint ≈ y 500 → top ≈ 200).
+    expect(cropRect.width).toBe(1000)
+    expect(cropRect.height).toBe(600)
+    expect(cropRect.top).toBe(200)
+  })
+
+  test("fill: centre cover-crop when there are no faces", () => {
+    const cropRect = computeFillCropRect({
+      imageWidth: 1200,
+      imageHeight: 1600,
+      ...PANEL,
+      faceBoxes: [],
+    })
+    // 1200×1600 portrait into 800×480 landscape → full-width 1200×720 band,
+    // vertically centred (top = (1600-720)/2 = 440).
+    expect(cropRect.width).toBe(1200)
+    expect(cropRect.height).toBe(720)
+    expect(cropRect.top).toBe(440)
+  })
+
+  test("fill: shifts up to keep faces at the top of a portrait", () => {
+    const cropRect = computeFillCropRect({
+      imageWidth: 1200,
+      imageHeight: 1600,
+      ...PANEL,
+      faceBoxes: [
+        { x1: 0.2, y1: 0.05, x2: 0.45, y2: 0.2 },
+        { x1: 0.55, y1: 0.08, x2: 0.8, y2: 0.22 },
+      ],
+    })
+    expect(cropRect.width).toBe(1200)
+    expect(cropRect.height).toBe(720)
+    // The faces fit the 720-tall window, so it shifts up to include them.
+    expect(cropRect.top).toBeLessThanOrEqual(44)
   })
 
   test("dual-portrait columns + gutter sum to the full width (even)", () => {

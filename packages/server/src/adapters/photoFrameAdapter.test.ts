@@ -24,7 +24,6 @@ const buildAdapter = () => {
     },
     getIntervalMinutes: () => 30,
     getRecencyHalfLifeDays: () => 30,
-    getPhotoLayout: () => "single",
     devices: [buildDevice()],
     deviceConfigStore,
     viewDataStore,
@@ -52,7 +51,7 @@ describe("photoFrameAdapter.showPhotoFrame", () => {
       },
     })
 
-    await adapter.showPhotoFrame(DEVICE_ID)
+    await adapter.showPhotoFrame({ deviceId: DEVICE_ID })
 
     // Exactly one push, and the cached photo is left untouched (no fetch).
     expect(pushDevice).toHaveBeenCalledTimes(1)
@@ -66,7 +65,7 @@ describe("photoFrameAdapter.showPhotoFrame", () => {
     const { adapter, viewDataStore, pushDevice } =
       buildAdapter()
 
-    await adapter.showPhotoFrame(DEVICE_ID)
+    await adapter.showPhotoFrame({ deviceId: DEVICE_ID })
 
     // No people/query and no cached photo: a single push renders the
     // placeholder, and no photo data was fetched or stored.

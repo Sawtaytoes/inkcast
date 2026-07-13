@@ -41,8 +41,6 @@ import {
   type PanelRotation,
   type PhotoFormat,
   type PhotoFormatSetting,
-  type PhotoLayout,
-  type PhotoLayoutSetting,
 } from "./state/deviceConfigStore.ts"
 import { createDeviceStore } from "./state/deviceStore.ts"
 import { createRenderTokenStore } from "./state/renderTokenStore.ts"
@@ -50,6 +48,7 @@ import { createViewDataStore } from "./state/viewDataStore.ts"
 import {
   getIsClockBearingView,
   getIsNowPlayingView,
+  getIsPhotoView,
   getIsViewName,
   VIEW_NAMES,
   type ViewName,
@@ -139,7 +138,6 @@ const PHOTO_FORMAT_OPTION_BY_SETTING: Record<
 // zone are MQTT config.
 const DEFAULT_CLOCK_TIME_FORMAT: ClockTimeFormat = "12h"
 const DEFAULT_CLOCK_DATE_STYLE: ClockDateStyle = "long"
-const DEFAULT_PHOTO_LAYOUT: PhotoLayout = "single"
 
 /** The exact HA option string for a time-format setting (matches the select). */
 const CLOCK_TIME_FORMAT_OPTION_BY_SETTING: Record<
@@ -199,36 +197,6 @@ const parseClockDateStyleSetting = (
   }
   if (normalized === "numeric") {
     return "numeric"
-  }
-  return null
-}
-
-/** The exact HA option string for a photo-layout setting (matches the select). */
-const PHOTO_LAYOUT_OPTION_BY_SETTING: Record<
-  PhotoLayoutSetting,
-  string
-> = {
-  auto: "Auto",
-  single: "Single",
-  "dual-portrait": "Dual Portrait",
-}
-
-/** Canonicalize an HA photo-layout option payload to a setting, or null. */
-const parsePhotoLayoutSetting = (
-  payload: string,
-): PhotoLayoutSetting | null => {
-  const normalized = payload.trim().toLowerCase()
-  if (normalized === "auto") {
-    return "auto"
-  }
-  if (normalized === "single") {
-    return "single"
-  }
-  if (
-    normalized === "dual portrait" ||
-    normalized === "dual-portrait"
-  ) {
-    return "dual-portrait"
   }
   return null
 }
@@ -368,19 +336,6 @@ const main = async () => {
           DEFAULT_PHOTO_QUALITY)
 
     return { format, quality }
-  }
-  // The Photo Frame layout, resolved per device: a real per-device value wins;
-  // "auto" (or unset) inherits the global default; and if neither is set the
-  // single-photo fallback applies.
-  const resolvePhotoLayout = (
-    deviceId: string,
-  ): PhotoLayout => {
-    const setting =
-      deviceConfigStore.getPhotoLayout(deviceId)
-    return setting && setting !== "auto"
-      ? setting
-      : (deviceConfigStore.getGlobalPhotoLayout() ??
-          DEFAULT_PHOTO_LAYOUT)
   }
   // The clock timezone + time/date format, resolved per device: a real
   // per-device value wins; "Auto"/empty inherit the global default; and if
@@ -579,13 +534,13 @@ const main = async () => {
     },
   })
 
-  /** Re-push every device showing the Photo Frame (global format/quality changed). */
+  /** Re-push every device on a Photo Frame view (global format/quality changed). */
   const refreshAllPhotoFrameDevices = () => {
     config.devices
-      .filter(
-        (device) =>
-          deviceStore.getActiveView(device.id) ===
-          "Photo Frame",
+      .filter((device) =>
+        getIsPhotoView(
+          deviceStore.getActiveView(device.id),
+        ),
       )
       .forEach((device) => {
         pushDeviceLogged(device.id)
@@ -608,7 +563,6 @@ const main = async () => {
         getIntervalMinutes: resolvePhotoIntervalMinutes,
         getRecencyHalfLifeDays:
           resolvePhotoRecencyHalfLifeDays,
-        getPhotoLayout: resolvePhotoLayout,
         devices: config.devices,
         deviceConfigStore,
         viewDataStore,
@@ -875,29 +829,6 @@ const main = async () => {
           },
         ],
         [
-          "photoLayout",
-          {
-            applyPayload: ({ deviceId, payload }) => {
-              const setting =
-                parsePhotoLayoutSetting(payload)
-              if (setting === null) {
-                return null
-              }
-              deviceConfigStore.setPhotoLayout({
-                deviceId,
-                setting,
-              })
-              return PHOTO_LAYOUT_OPTION_BY_SETTING[setting]
-            },
-            getHasValue: (deviceId) =>
-              deviceConfigStore.getPhotoLayout(deviceId) !==
-              undefined,
-            onApplied: async (deviceId) => {
-              await pushController.pushDevice(deviceId)
-            },
-          },
-        ],
-        [
           "dither",
           {
             applyPayload: ({ deviceId, payload }) => {
@@ -1096,10 +1027,6 @@ const main = async () => {
         clockDateStyle: {
           command: topics.clockDateStyleCommand,
           state: topics.clockDateStyleState,
-        },
-        photoLayout: {
-          command: topics.photoLayoutCommand,
-          state: topics.photoLayoutState,
         },
         dither: {
           command: topics.ditherCommand,
@@ -1371,30 +1298,6 @@ const main = async () => {
             ],
         },
       ],
-      [
-        "photoLayout",
-        {
-          command: globalTopics.photoLayoutCommand,
-          state: globalTopics.photoLayoutState,
-          applyPayload: (payload) => {
-            const setting = parsePhotoLayoutSetting(payload)
-            // The global default has no "Auto" — it IS the root default.
-            if (setting === null || setting === "auto") {
-              return null
-            }
-            deviceConfigStore.setGlobalPhotoLayout(setting)
-            return PHOTO_LAYOUT_OPTION_BY_SETTING[setting]
-          },
-          getHasValue: () =>
-            deviceConfigStore.getGlobalPhotoLayout() !==
-            undefined,
-          afterChange: refreshAllPhotoFrameDevices,
-          seedDefault:
-            PHOTO_LAYOUT_OPTION_BY_SETTING[
-              DEFAULT_PHOTO_LAYOUT
-            ],
-        },
-      ],
     ])
 
     const commandRoutes = new Map<string, TopicRoute>()
@@ -1523,20 +1426,23 @@ const main = async () => {
         if (route.kind === "view") {
           if (getIsViewName(payload)) {
             if (
-              payload === "Photo Frame" &&
+              getIsPhotoView(payload) &&
               photoFrameAdapter
             ) {
-              // Switching into Photo Frame must (re)fetch using the
+              // Switching into a Photo Frame view must (re)fetch using the
               // already-configured people/query — a bare push would only
               // repaint stale/absent bytes and wrongly show the "configure
-              // in Home Assistant" placeholder.
+              // in Home Assistant" placeholder. forceRefresh recomposes for the
+              // newly selected view even if a photo (fit for the old view) is
+              // cached.
               deviceStore.setActiveView({
                 deviceId: route.deviceId,
                 viewName: payload,
               })
-              await photoFrameAdapter.showPhotoFrame(
-                route.deviceId,
-              )
+              await photoFrameAdapter.showPhotoFrame({
+                deviceId: route.deviceId,
+                isForcedRefresh: true,
+              })
             } else {
               // Every other view (including Clock (Agenda), whose data arrives
               // on the retained `agenda/set` topic) just renders what's known.
@@ -1565,15 +1471,15 @@ const main = async () => {
               isExplicit: false,
             })
             if (
-              payload === "Photo Frame" &&
+              getIsPhotoView(payload) &&
               photoFrameAdapter
             ) {
-              // Boot-time restore into Photo Frame: fetch straight away
+              // Boot-time restore into a Photo Frame view: fetch straight away
               // instead of waiting up to a full interval tick, so the panel
               // never shows the placeholder while people/query are set.
-              await photoFrameAdapter.showPhotoFrame(
-                route.deviceId,
-              )
+              await photoFrameAdapter.showPhotoFrame({
+                deviceId: route.deviceId,
+              })
             } else {
               await pushController.pushDevice(
                 route.deviceId,
@@ -1774,14 +1680,6 @@ const main = async () => {
             kind: "clockDateStyle",
             hasValue:
               deviceConfigStore.getClockDateStyle(
-                device.id,
-              ) !== undefined,
-            payload: "Auto",
-          },
-          {
-            kind: "photoLayout",
-            hasValue:
-              deviceConfigStore.getPhotoLayout(
                 device.id,
               ) !== undefined,
             payload: "Auto",

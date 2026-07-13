@@ -744,6 +744,9 @@ export const createBrowserMode = ({
           targetWidth: device.width,
           targetHeight: device.height,
           faceBoxes,
+          // Browser Photo Frame keeps the letterbox fit; the Fill/Duo views are
+          // image-mode (e-ink) only for now.
+          fitMode: "letterbox",
         })
         return context.body(new Uint8Array(png), 200, {
           "Content-Type": "image/png",

@@ -37,6 +37,62 @@ const clamp = ({
  * or null when the padded face union is bigger than the window itself
  * (caller letterboxes so no face is lost).
  */
+/** The largest panel-aspect cover-crop window that fits inside the image. */
+const computeCoverWindow = ({
+  imageWidth,
+  imageHeight,
+  targetWidth,
+  targetHeight,
+}: {
+  imageWidth: number
+  imageHeight: number
+  targetWidth: number
+  targetHeight: number
+}) => {
+  const targetAspect = targetWidth / targetHeight
+  const imageAspect = imageWidth / imageHeight
+  const cropWidth =
+    imageAspect > targetAspect
+      ? imageHeight * targetAspect
+      : imageWidth
+  return { cropWidth, cropHeight: cropWidth / targetAspect }
+}
+
+/** The padded bounding box of every face, clamped inside the image (px). */
+const computePaddedFaceUnion = ({
+  imageWidth,
+  imageHeight,
+  faceBoxes,
+}: {
+  imageWidth: number
+  imageHeight: number
+  faceBoxes: readonly FaceBox[]
+}) => {
+  const rawLeft =
+    Math.min(...faceBoxes.map((box) => box.x1)) * imageWidth
+  const rawTop =
+    Math.min(...faceBoxes.map((box) => box.y1)) *
+    imageHeight
+  const rawRight =
+    Math.max(...faceBoxes.map((box) => box.x2)) * imageWidth
+  const rawBottom =
+    Math.max(...faceBoxes.map((box) => box.y2)) *
+    imageHeight
+  const paddingX =
+    (rawRight - rawLeft) * FACE_PADDING_FRACTION
+  const paddingY =
+    (rawBottom - rawTop) * FACE_PADDING_FRACTION
+  return {
+    unionLeft: Math.max(0, rawLeft - paddingX),
+    unionTop: Math.max(0, rawTop - paddingY),
+    unionRight: Math.min(imageWidth, rawRight + paddingX),
+    unionBottom: Math.min(
+      imageHeight,
+      rawBottom + paddingY,
+    ),
+  }
+}
+
 export const computeFaceCropRect = ({
   imageWidth,
   imageHeight,
@@ -54,41 +110,18 @@ export const computeFaceCropRect = ({
     return null
   }
 
-  // The biggest window of the panel's aspect that fits inside the image —
-  // identical to what a plain cover-crop would use.
-  const targetAspect = targetWidth / targetHeight
-  const imageAspect = imageWidth / imageHeight
-  const cropWidth =
-    imageAspect > targetAspect
-      ? imageHeight * targetAspect
-      : imageWidth
-  const cropHeight = cropWidth / targetAspect
-
-  // The padded face union, clamped inside the image.
-  const rawLeft =
-    Math.min(...faceBoxes.map((box) => box.x1)) * imageWidth
-  const rawTop =
-    Math.min(...faceBoxes.map((box) => box.y1)) *
-    imageHeight
-  const rawRight =
-    Math.max(...faceBoxes.map((box) => box.x2)) * imageWidth
-  const rawBottom =
-    Math.max(...faceBoxes.map((box) => box.y2)) *
-    imageHeight
-  const paddingX =
-    (rawRight - rawLeft) * FACE_PADDING_FRACTION
-  const paddingY =
-    (rawBottom - rawTop) * FACE_PADDING_FRACTION
-  const unionLeft = Math.max(0, rawLeft - paddingX)
-  const unionTop = Math.max(0, rawTop - paddingY)
-  const unionRight = Math.min(
+  const { cropWidth, cropHeight } = computeCoverWindow({
     imageWidth,
-    rawRight + paddingX,
-  )
-  const unionBottom = Math.min(
     imageHeight,
-    rawBottom + paddingY,
-  )
+    targetWidth,
+    targetHeight,
+  })
+  const { unionLeft, unionTop, unionRight, unionBottom } =
+    computePaddedFaceUnion({
+      imageWidth,
+      imageHeight,
+      faceBoxes,
+    })
 
   // Faces wider/taller than the maximal window: no shift can save them.
   if (
@@ -129,6 +162,105 @@ export const computeFaceCropRect = ({
   }
 }
 
+/**
+ * One axis of a fill crop: shift the maximal cover-crop the minimum distance to
+ * fit the whole face span when it fits, otherwise centre on the face span's
+ * midpoint (keeping the middle faces and cropping the outliers). Always inside
+ * the image — a fill crop never letterboxes.
+ */
+const computeFillOffset = ({
+  imageSize,
+  cropSize,
+  spanStart,
+  spanEnd,
+}: {
+  imageSize: number
+  cropSize: number
+  spanStart: number
+  spanEnd: number
+}) => {
+  const centered = (imageSize - cropSize) / 2
+  const isSpanWithinWindow = spanEnd - spanStart <= cropSize
+  const value = isSpanWithinWindow
+    ? clamp({
+        value: centered,
+        minimum: spanEnd - cropSize,
+        maximum: spanStart,
+      })
+    : (spanStart + spanEnd) / 2 - cropSize / 2
+  return clamp({
+    value,
+    minimum: 0,
+    maximum: imageSize - cropSize,
+  })
+}
+
+/**
+ * The face-steered maximal cover-crop that ALWAYS fills the panel — it never
+ * letterboxes. When the faces fit the window it behaves exactly like
+ * `computeFaceCropRect`; when they span too far to all fit, it centres on the
+ * face mass (keeping the primary/central faces, cropping the outermost) instead
+ * of giving up to white bars. Powers the "Photo Frame (Fill)" view and each
+ * column of a dual-portrait composite.
+ */
+export const computeFillCropRect = ({
+  imageWidth,
+  imageHeight,
+  targetWidth,
+  targetHeight,
+  faceBoxes,
+}: {
+  imageWidth: number
+  imageHeight: number
+  targetWidth: number
+  targetHeight: number
+  faceBoxes: readonly FaceBox[]
+}): CropRect => {
+  const { cropWidth, cropHeight } = computeCoverWindow({
+    imageWidth,
+    imageHeight,
+    targetWidth,
+    targetHeight,
+  })
+
+  if (faceBoxes.length === 0) {
+    return {
+      left: Math.round((imageWidth - cropWidth) / 2),
+      top: Math.round((imageHeight - cropHeight) / 2),
+      width: Math.round(cropWidth),
+      height: Math.round(cropHeight),
+    }
+  }
+
+  const { unionLeft, unionTop, unionRight, unionBottom } =
+    computePaddedFaceUnion({
+      imageWidth,
+      imageHeight,
+      faceBoxes,
+    })
+
+  return {
+    left: Math.round(
+      computeFillOffset({
+        imageSize: imageWidth,
+        cropSize: cropWidth,
+        spanStart: unionLeft,
+        spanEnd: unionRight,
+      }),
+    ),
+    top: Math.round(
+      computeFillOffset({
+        imageSize: imageHeight,
+        cropSize: cropHeight,
+        spanStart: unionTop,
+        spanEnd: unionBottom,
+      }),
+    ),
+    width: Math.round(cropWidth),
+    height: Math.round(cropHeight),
+  }
+}
+
 /** True when the image is taller than it is wide (portrait orientation). */
 export const isPortraitImage = async ({
   jpegBytes,
@@ -142,34 +274,53 @@ export const isPortraitImage = async ({
 }
 
 /**
- * Render one JPEG into an exactly `targetWidth×targetHeight` PNG: the
- * face-steered maximal cover-crop when the faces fit, else the whole image
- * letterboxed on white. The shared core behind both the single-photo frame and
- * each half of a dual-portrait composite.
+ * How a photo is fit to its target window:
+ * - `letterbox` — face-steered cover-crop when every face fits the maximal
+ *   window, else white letterbox bars so no one is cut ("Photo Frame").
+ * - `fill` — always fills the window, centring on the face mass when the faces
+ *   can't all fit ("Photo Frame (Fill)" and dual-portrait columns).
+ */
+export type PhotoFitMode = "letterbox" | "fill"
+
+/**
+ * Render one JPEG into an exactly `targetWidth×targetHeight` PNG. `fitMode`
+ * chooses letterbox vs fill (see `PhotoFitMode`). The shared core behind the
+ * single-photo frame and each half of a dual-portrait composite.
  */
 const renderToTarget = async ({
   jpegBytes,
   targetWidth,
   targetHeight,
   faceBoxes,
+  fitMode,
 }: {
   jpegBytes: Buffer
   targetWidth: number
   targetHeight: number
   faceBoxes: readonly FaceBox[]
+  fitMode: PhotoFitMode
 }): Promise<{ png: Buffer; mode: string }> => {
   const image = sharp(jpegBytes)
   const metadata = await image.metadata()
   const imageWidth = metadata.width ?? 0
   const imageHeight = metadata.height ?? 0
 
-  const cropRect = computeFaceCropRect({
-    imageWidth,
-    imageHeight,
-    targetWidth,
-    targetHeight,
-    faceBoxes,
-  })
+  const cropRect =
+    fitMode === "fill"
+      ? computeFillCropRect({
+          imageWidth,
+          imageHeight,
+          targetWidth,
+          targetHeight,
+          faceBoxes,
+        })
+      : computeFaceCropRect({
+          imageWidth,
+          imageHeight,
+          targetWidth,
+          targetHeight,
+          faceBoxes,
+        })
 
   if (cropRect) {
     const png = await image
@@ -177,7 +328,13 @@ const renderToTarget = async ({
       .resize(targetWidth, targetHeight)
       .png()
       .toBuffer()
-    return { png, mode: "face-steered cover-crop" }
+    return {
+      png,
+      mode:
+        fitMode === "fill"
+          ? "face-steered fill-crop"
+          : "face-steered cover-crop",
+    }
   }
 
   const png = await image
@@ -202,26 +359,29 @@ const renderToTarget = async ({
 }
 
 /**
- * Produce an exactly `targetWidth×targetHeight` PNG: the face-steered maximal
- * cover-crop when the faces fit, else the whole image letterboxed on white.
- * Returns the PNG plus which mode was used (for logging).
+ * Produce an exactly `targetWidth×targetHeight` PNG from one photo, fit per
+ * `fitMode` (letterbox or fill). Returns the PNG plus which mode was used (for
+ * logging).
  */
 export const preparePhotoFrameImage = ({
   jpegBytes,
   targetWidth,
   targetHeight,
   faceBoxes,
+  fitMode,
 }: {
   jpegBytes: Buffer
   targetWidth: number
   targetHeight: number
   faceBoxes: readonly FaceBox[]
+  fitMode: PhotoFitMode
 }) =>
   renderToTarget({
     jpegBytes,
     targetWidth,
     targetHeight,
     faceBoxes,
+    fitMode,
   })
 
 /**
@@ -249,9 +409,9 @@ export const computeDualPortraitColumns = ({
 /**
  * Compose two portrait photos side by side into one exactly
  * `targetWidth×targetHeight` PNG. Each photo is face-steered independently into
- * its own half-panel column (the same crop-or-letterbox logic as a single
- * frame), and the two columns are composited onto a white canvas with a thin
- * gutter between them. For landscape image-mode panels (see
+ * its own half-panel column and always fills it (fit "fill" — a column never
+ * letterboxes), and the two columns are composited onto a white canvas with a
+ * thin gutter between them. For landscape image-mode panels (see
  * docs/decisions/2026-07-12-dual-portrait-photo-layout.md).
  */
 export const composeDualPortrait = async ({
@@ -283,12 +443,14 @@ export const composeDualPortrait = async ({
       targetWidth: leftWidth,
       targetHeight,
       faceBoxes: leftFaceBoxes,
+      fitMode: "fill",
     }),
     renderToTarget({
       jpegBytes: rightJpegBytes,
       targetWidth: rightWidth,
       targetHeight,
       faceBoxes: rightFaceBoxes,
+      fitMode: "fill",
     }),
   ])
 

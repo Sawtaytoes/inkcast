@@ -11,14 +11,29 @@ import {
 import {
   composeDualPortrait,
   isPortraitImage,
+  type PhotoFitMode,
   preparePhotoFrameImage,
 } from "../immich/photoFrameImage.ts"
-import type {
-  DeviceConfigStore,
-  PhotoLayout,
-} from "../state/deviceConfigStore.ts"
+import type { DeviceConfigStore } from "../state/deviceConfigStore.ts"
 import type { ViewDataStore } from "../state/viewDataStore.ts"
-import type { ViewName } from "../views/registry.ts"
+import {
+  getIsPhotoView,
+  type ViewName,
+} from "../views/registry.ts"
+
+/** The dual-portrait (two-up) photo view. */
+const DUAL_PHOTO_VIEW: ViewName = "Photo Frame (Duo)"
+
+/**
+ * How each photo view fits a single photo to the panel: the plain "Photo Frame"
+ * letterboxes when faces don't fit; "(Fill)" and "(Duo)" fill the panel. (Duo
+ * only falls back to a single photo when two portraits aren't available, and it
+ * fills when it does.)
+ */
+const getPhotoFitMode = (
+  viewName: ViewName,
+): PhotoFitMode =>
+  viewName === "Photo Frame" ? "letterbox" : "fill"
 
 const TICK_MILLISECONDS = 60_000
 const HISTORY_LIMIT = 20
@@ -40,20 +55,20 @@ type PhotoHistory = {
 }
 
 /**
- * The Immich photo-frame adapter. Each minute it looks at every device whose
- * selected view is "Photo Frame" and, when the
- * current photo is older than the rotation interval (or missing), fetches a
- * fresh recency-weighted random photo matching the device's people and/or
- * smart-search query, crops it face-aware to the exact panel, stores it, and
- * re-pushes the device. `refreshDevice` also runs directly when the people or
- * query config changes from Home Assistant; `showNextPhoto` /
- * `showPreviousPhoto` walk a per-device history (the HA buttons).
+ * The Immich photo-frame adapter. Each minute it looks at every device on a
+ * Photo Frame view (any of the photo-view family) and, when the current photo
+ * is older than the rotation interval (or missing), fetches a fresh
+ * recency-weighted random photo matching the device's people and/or
+ * smart-search query, fits it to the panel per the active view (letterbox /
+ * fill / dual-portrait), stores it, and re-pushes the device. `refreshDevice`
+ * also runs directly when the people or query config changes from Home
+ * Assistant; `showNextPhoto` / `showPreviousPhoto` walk a per-device history
+ * (the HA buttons).
  */
 export const createPhotoFrameAdapter = ({
   immichConfig,
   getIntervalMinutes,
   getRecencyHalfLifeDays,
-  getPhotoLayout,
   devices,
   deviceConfigStore,
   viewDataStore,
@@ -65,8 +80,6 @@ export const createPhotoFrameAdapter = ({
   getIntervalMinutes: (deviceId: string) => number
   /** Recency half-life for a device, days (resolved live from HA config). */
   getRecencyHalfLifeDays: (deviceId: string) => number
-  /** Photo layout for a device (resolved live from HA config). */
-  getPhotoLayout: (deviceId: string) => PhotoLayout
   devices: readonly ConfiguredDevice[]
   deviceConfigStore: DeviceConfigStore
   viewDataStore: ViewDataStore
@@ -101,15 +114,17 @@ export const createPhotoFrameAdapter = ({
     })
   }
 
-  /** Fetch + crop + store + push one specific asset for one device. */
+  /** Fetch + fit + store + push one specific asset for one device. */
   const showAsset = async ({
     device,
     assetId,
     personIds,
+    fitMode,
   }: {
     device: ConfiguredDevice
     assetId: string
     personIds: readonly string[]
+    fitMode: PhotoFitMode
   }) => {
     const [jpegBytes, faceBoxes] = await Promise.all([
       fetchPreviewJpeg({
@@ -127,6 +142,7 @@ export const createPhotoFrameAdapter = ({
       targetWidth: device.width,
       targetHeight: device.height,
       faceBoxes,
+      fitMode,
     })
 
     viewDataStore.setPhotoFrame({
@@ -295,11 +311,13 @@ export const createPhotoFrameAdapter = ({
         return false
       }
 
-      // Landscape panels set to dual-portrait try two side-by-side portraits
-      // first; showDualPortrait returns false (and we fall through to a single
-      // photo) when two portraits aren't available this cycle.
+      const activeView = getActiveView(deviceId)
+
+      // The dual-portrait view on a landscape panel tries two side-by-side
+      // portraits first; showDualPortrait returns false (and we fall through to
+      // a single photo) when two portraits aren't available this cycle.
       const isDualPortrait =
-        getPhotoLayout(deviceId) === "dual-portrait" &&
+        activeView === DUAL_PHOTO_VIEW &&
         device.width > device.height
       if (isDualPortrait) {
         const hasShownDual = await showDualPortrait({
@@ -329,6 +347,7 @@ export const createPhotoFrameAdapter = ({
         device,
         assetId,
         personIds: source.personIds,
+        fitMode: getPhotoFitMode(activeView),
       })
       recordShownAsset({ deviceId, assetId })
       return true
@@ -349,9 +368,20 @@ export const createPhotoFrameAdapter = ({
    * the instructional placeholder. Exactly one push happens either way, so
    * e-ink never flashes the placeholder before the photo.
    */
-  const showPhotoFrame = async (deviceId: string) => {
+  const showPhotoFrame = async ({
+    deviceId,
+    isForcedRefresh = false,
+  }: {
+    deviceId: string
+    /**
+     * Recompose even when a photo is cached — used when the user switches
+     * between photo views (e.g. Photo Frame → Fill), where the cached PNG was
+     * fit for the previous view and must be rebuilt for the new one.
+     */
+    isForcedRefresh?: boolean
+  }) => {
     const current = viewDataStore.getPhotoFrame(deviceId)
-    if (current) {
+    if (current && !isForcedRefresh) {
       await pushDevice(deviceId)
       return
     }
@@ -399,6 +429,7 @@ export const createPhotoFrameAdapter = ({
         device,
         assetId: history.assetIds[targetIndex],
         personIds: source?.personIds ?? [],
+        fitMode: getPhotoFitMode(getActiveView(deviceId)),
       })
       historyByDeviceId.set(deviceId, {
         assetIds: history.assetIds,
@@ -422,9 +453,8 @@ export const createPhotoFrameAdapter = ({
     TICK_MILLISECONDS,
   ).subscribe(() => {
     devices
-      .filter(
-        (device) =>
-          getActiveView(device.id) === "Photo Frame",
+      .filter((device) =>
+        getIsPhotoView(getActiveView(device.id)),
       )
       .forEach((device) => {
         const current = viewDataStore.getPhotoFrame(

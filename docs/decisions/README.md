@@ -8,7 +8,8 @@ proposing a change; a settled decision here overrides default instinct.
 | Date | Decision | Status |
 | --- | --- | --- |
 | 2026-07-12 | [The M5Paper self-refreshes over MQTT: esp-idf firmware subscribes to a render-URL topic](2026-07-12-m5paper-esp-idf-mqtt-live-refresh.md) | Accepted |
-| 2026-07-12 | [Landscape photo frames can show two portraits side by side (server-composed)](2026-07-12-dual-portrait-photo-layout.md) | Accepted |
+| 2026-07-12 | [Landscape photo frames can show two portraits side by side — the "Photo Frame (Duo)" view](2026-07-12-dual-portrait-photo-layout.md) | Accepted |
+| 2026-07-12 | ["Photo Frame (Fill)" is a photo view that fills the panel instead of letterboxing](2026-07-12-photo-frame-fill-view.md) | Accepted |
 | 2026-07-08 | [The M5Paper is an image-mode device that also declares touch + fast-update](2026-07-08-m5paper-image-plus-touch-plus-fast-update.md) | Accepted |
 | 2026-07-07 | [CastKit is one platform: one server, Inkcast (image) and Slatecast (browser) as client modes](2026-07-07-castkit-platform-one-server-two-client-modes.md) | Accepted |
 | 2026-07-07 | [MQTT topics unify flat under `castkit/<id>/…`; fleet migration gated on all devices online](2026-07-07-flat-castkit-topics-migration-gated.md) | Accepted |

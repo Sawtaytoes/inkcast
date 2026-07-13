@@ -70,8 +70,6 @@ export const buildDeviceTopics = ({
     clockTimeFormatState: `${base}/clock_time_format`,
     clockDateStyleCommand: `${base}/clock_date_style/set`,
     clockDateStyleState: `${base}/clock_date_style`,
-    photoLayoutCommand: `${base}/photo_layout/set`,
-    photoLayoutState: `${base}/photo_layout`,
     photoIntervalCommand: `${base}/photo_interval/set`,
     photoIntervalState: `${base}/photo_interval`,
     photoRecencyCommand: `${base}/photo_recency/set`,
@@ -116,9 +114,6 @@ export const buildGlobalTopics = (
   /** Global default clock date style (Long / Numeric). */
   clockDateStyleCommand: `${baseTopic}/clock_date_style/set`,
   clockDateStyleState: `${baseTopic}/clock_date_style`,
-  /** Global default Photo Frame layout (Single / Dual Portrait). */
-  photoLayoutCommand: `${baseTopic}/photo_layout/set`,
-  photoLayoutState: `${baseTopic}/photo_layout`,
   /** Global default Photo Frame rotation interval, minutes. */
   photoIntervalCommand: `${baseTopic}/photo_interval/set`,
   photoIntervalState: `${baseTopic}/photo_interval`,
@@ -193,21 +188,6 @@ export const GLOBAL_CLOCK_DATE_STYLE_OPTIONS = [
 export const CLOCK_DATE_STYLE_OPTIONS = [
   "Auto",
   ...GLOBAL_CLOCK_DATE_STYLE_OPTIONS,
-] as const
-
-/**
- * HA-facing Photo Frame layout options (double as MQTT payloads). The global
- * default select offers the two real layouts; a per-device select prepends
- * "Auto" (= inherit the global default).
- */
-export const GLOBAL_PHOTO_LAYOUT_OPTIONS = [
-  "Single",
-  "Dual Portrait",
-] as const
-
-export const PHOTO_LAYOUT_OPTIONS = [
-  "Auto",
-  ...GLOBAL_PHOTO_LAYOUT_OPTIONS,
 ] as const
 
 /** The HA `device` block that ties every entity to one physical display. */
@@ -562,22 +542,6 @@ export const buildDiscoveryMessages = ({
       },
     },
     {
-      // Per-device Photo Frame layout; "Auto" = inherit the global default
-      // on the Inkcast Server device.
-      topic: discoveryTopic("select", "photo_layout"),
-      isRetained: true,
-      payload: {
-        ...availability,
-        name: "Photo Frame: Layout",
-        unique_id: `inkcast_${device.id}_photo_layout`,
-        options: [...PHOTO_LAYOUT_OPTIONS],
-        command_topic: topics.photoLayoutCommand,
-        state_topic: topics.photoLayoutState,
-        entity_category: "config",
-        device: deviceBlock,
-      },
-    },
-    {
       // Per-device lossy quality for JPEG/WebP. 0 = inherit the global default
       // (a number entity always carries a value, so 0 is the "unset" sentinel).
       topic: discoveryTopic("number", "photo_quality"),
@@ -764,22 +728,6 @@ export const buildGlobalDiscoveryMessages = (
         options: Array.from(GLOBAL_PHOTO_FORMAT_OPTIONS),
         command_topic: topics.photoFormatCommand,
         state_topic: topics.photoFormatState,
-        entity_category: "config",
-        device: serverDeviceBlock,
-      },
-    },
-    {
-      // Global default Photo Frame layout — used by any display whose own
-      // "Photo Frame: Layout" is "Auto" (inherit).
-      topic: `${discoveryPrefix}/select/${nodeId}/server_photo_layout/config`,
-      isRetained: true as const,
-      payload: {
-        ...availability,
-        name: "Photo Frame: Layout",
-        unique_id: "inkcast_server_photo_layout",
-        options: [...GLOBAL_PHOTO_LAYOUT_OPTIONS],
-        command_topic: topics.photoLayoutCommand,
-        state_topic: topics.photoLayoutState,
         entity_category: "config",
         device: serverDeviceBlock,
       },
