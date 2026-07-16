@@ -245,8 +245,16 @@ describe("parseAgendaPayload", () => {
       }),
     ).toEqual({
       events: [
-        { startMs: 1000, summary: "Standup", isAllDay: false },
-        { startMs: 2000, summary: "Dentist", isAllDay: false },
+        {
+          startMs: 1000,
+          summary: "Standup",
+          isAllDay: false,
+        },
+        {
+          startMs: 2000,
+          summary: "Dentist",
+          isAllDay: false,
+        },
       ],
     })
   })
@@ -256,7 +264,11 @@ describe("parseAgendaPayload", () => {
       events: [
         { start: 1000, summary: "Walk dog" },
         { start: 5000, summary: "Walk dog" },
-        { start: 1000, summary: "Walk dog", isAllDay: true },
+        {
+          start: 1000,
+          summary: "Walk dog",
+          isAllDay: true,
+        },
       ],
     })
     expect(result.events).toHaveLength(3)

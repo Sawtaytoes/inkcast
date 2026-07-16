@@ -34,7 +34,9 @@ export const createRenderTokenStore = ({
 } = {}): RenderTokenStore => {
   const ttlMs = ttlMinutes * 60 * 1000
   const store = new Map<string, TokenEntry>()
-  let sweeperInterval: ReturnType<typeof setInterval> | null = null
+  let sweeperInterval: ReturnType<
+    typeof setInterval
+  > | null = null
 
   return {
     createToken: (png: Buffer) => {
@@ -68,7 +70,10 @@ export const createRenderTokenStore = ({
         for (const [token, entry] of store.entries()) {
           // Evict only unfetched tokens that have exceeded the TTL.
           // In-flight tokens are never evicted here; only via evictToken after flush.
-          if (!entry.inFlight && now - entry.createdAt > ttlMs) {
+          if (
+            !entry.inFlight &&
+            now - entry.createdAt > ttlMs
+          ) {
             store.delete(token)
           }
         }

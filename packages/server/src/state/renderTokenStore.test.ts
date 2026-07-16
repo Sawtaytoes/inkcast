@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "vitest"
 import { createRenderTokenStore } from "./renderTokenStore.ts"
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47])
@@ -43,7 +50,9 @@ describe("createRenderTokenStore", () => {
     afterEach(() => vi.useRealTimers())
 
     test("evicts a never-fetched token after the TTL", () => {
-      const store = createRenderTokenStore({ ttlMinutes: 10 })
+      const store = createRenderTokenStore({
+        ttlMinutes: 10,
+      })
       const token = store.createToken(PNG)
       store.startSweeper()
       vi.advanceTimersByTime(11 * 60 * 1000)
@@ -52,7 +61,9 @@ describe("createRenderTokenStore", () => {
     })
 
     test("never evicts an in-flight token via the sweeper", () => {
-      const store = createRenderTokenStore({ ttlMinutes: 10 })
+      const store = createRenderTokenStore({
+        ttlMinutes: 10,
+      })
       const token = store.createToken(PNG)
       store.fetchToken(token) // marks in-flight
       store.startSweeper()

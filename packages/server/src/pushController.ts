@@ -84,7 +84,10 @@ export const createPushController = ({
   // fresh URL when the rendered bytes actually changed — a clock ticks every
   // minute so it still updates, but an unchanged agenda/now-playing frame won't
   // needlessly reflash the panel.
-  const lastPublishedHashByDevice = new Map<string, string>()
+  const lastPublishedHashByDevice = new Map<
+    string,
+    string
+  >()
 
   const renderDevice = async (deviceId: string) => {
     const device = deviceById.get(deviceId)
@@ -221,10 +224,7 @@ export const createPushController = ({
     // but skip when the render is byte-identical to the last one we delivered so
     // an idle panel doesn't reflash. `publicUrl` must be set for the URL to be
     // reachable off-host.
-    if (
-      device.imageDelivery === "http-pull" &&
-      publicUrl
-    ) {
+    if (device.imageDelivery === "http-pull" && publicUrl) {
       const renderHash = createHash("sha256")
         .update(image)
         .digest("hex")

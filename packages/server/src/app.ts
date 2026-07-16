@@ -134,11 +134,16 @@ export const createApp = ({
     // The delivery URL is `/render/<token>.png`, so the `:token` path param
     // arrives WITH the `.png` extension — strip it before the store lookup
     // (the store is keyed by the bare token). Without this every fetch 404s.
-    const token = context.req.param("token").replace(/\.png$/, "")
+    const token = context.req
+      .param("token")
+      .replace(/\.png$/, "")
     const png = renderTokenStore.fetchToken(token)
 
     if (!png) {
-      return context.json({ error: "token not found or already used" }, 404)
+      return context.json(
+        { error: "token not found or already used" },
+        404,
+      )
     }
 
     // Copy the bytes into a fixed-length response, then evict (single-use).
