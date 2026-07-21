@@ -51,13 +51,16 @@ export const buildBrowserDeviceTopics = ({
     photoQueryState: `${base}/photo_query`,
     photoIntervalCommand: `${base}/photo_interval/set`,
     photoIntervalState: `${base}/photo_interval`,
-    // Panel backlight (gpio-backlight, on/off only on the HyperPixels) —
-    // handled by a tiny MQTT agent ON THE KIOSK PI (castkit-backlight
-    // service), not by the server or the SPA: a browser can't reach sysfs.
-    // The agent carries its own LWT availability so the switch reflects the
-    // Pi agent, not the render server.
+    // Panel backlight — handled by a tiny MQTT agent ON THE KIOSK PI
+    // (castkit-backlight service), not by the server or the SPA: a browser
+    // can't reach sysfs. The agent carries its own LWT availability so the
+    // light reflects the Pi agent, not the render server. Brightness is real
+    // 0–255 dimming on the PWM-backlight overlay, and collapses to on/off on
+    // a stock gpio-backlight (the agent auto-detects and scales).
     backlightCommand: `${base}/backlight/set`,
     backlightState: `${base}/backlight`,
+    backlightBrightnessCommand: `${base}/backlight/brightness/set`,
+    backlightBrightnessState: `${base}/backlight/brightness`,
     backlightAvailability: `${base}/backlight/available`,
     // View data HA pushes to this screen (retained) — same contract as the
     // image devices, plus the queue.
@@ -180,10 +183,12 @@ export const buildBrowserDiscoveryMessages = ({
       },
     },
     {
-      // Panel backlight on/off — commands are consumed by the per-Pi
-      // castkit-backlight agent (pure-MQTT peer, same contract style as the
-      // tap commands). Availability = the agent's LWT, not the server's.
-      topic: discoveryTopic("switch", "backlight"),
+      // Panel backlight as a dimmable light — commands are consumed by the
+      // per-Pi castkit-backlight agent (pure-MQTT peer, same contract style
+      // as the tap commands). Brightness is the panel's real PWM backlight
+      // (0–255); on a stock gpio-backlight the agent collapses it to on/off.
+      // Availability = the agent's LWT, not the server's.
+      topic: discoveryTopic("light", "backlight"),
       isRetained: true,
       payload: {
         availability_topic: topics.backlightAvailability,
@@ -195,6 +200,11 @@ export const buildBrowserDiscoveryMessages = ({
         state_topic: topics.backlightState,
         payload_on: "ON",
         payload_off: "OFF",
+        brightness_command_topic:
+          topics.backlightBrightnessCommand,
+        brightness_state_topic:
+          topics.backlightBrightnessState,
+        brightness_scale: 255,
         icon: "mdi:television-ambient-light",
         device: deviceBlock,
       },

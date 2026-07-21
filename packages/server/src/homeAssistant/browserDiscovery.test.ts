@@ -53,7 +53,7 @@ describe("buildBrowserDiscoveryMessages", () => {
       "homeassistant/sensor/castkit/dev-square_url/config",
       "homeassistant/binary_sensor/castkit/dev-square_connected/config",
       "homeassistant/select/castkit/dev-square_theme/config",
-      "homeassistant/switch/castkit/dev-square_backlight/config",
+      "homeassistant/light/castkit/dev-square_backlight/config",
       "homeassistant/select/castkit/dev-square_rotation/config",
       "homeassistant/text/castkit/dev-square_photo_people/config",
       "homeassistant/text/castkit/dev-square_photo_query/config",
@@ -87,6 +87,24 @@ describe("buildBrowserDiscoveryMessages", () => {
           : "castkit/availability",
       )
     })
+  })
+
+  test("the backlight is a dimmable light on the Pi agent's brightness topics", () => {
+    const backlight = messages.find((message) =>
+      message.topic.includes(
+        "light/castkit/dev-square_backlight/",
+      ),
+    )!
+    expect(backlight.payload.command_topic).toBe(
+      "castkit/dev-square/backlight/set",
+    )
+    expect(backlight.payload.brightness_command_topic).toBe(
+      "castkit/dev-square/backlight/brightness/set",
+    )
+    expect(backlight.payload.brightness_state_topic).toBe(
+      "castkit/dev-square/backlight/brightness",
+    )
+    expect(backlight.payload.brightness_scale).toBe(255)
   })
 
   test("the View select offers the capability-filtered views", () => {
